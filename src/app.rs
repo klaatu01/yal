@@ -193,13 +193,12 @@ pub fn App() -> impl IntoView {
         <div id="bar">
             <input
               id="search"
-              placeholder="type to filter…"
               prop:value=move || query.get()
               on:input=on_input
               on:keydown=on_key
-              autocapitalize="off"
-              autocomplete="off"
-              spellcheck=false
+              prop:spellcheck=false
+              prop:autocorrect="off"
+              prop:autocapitalize="off"
               autofocus
             />
         </div>
