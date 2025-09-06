@@ -66,31 +66,56 @@ pub fn App() -> impl IntoView {
             .into_iter()
             .filter(|a| fuzzy_match(&a.name, &q))
             .collect();
-        // keep selection in bounds
         if !v.is_empty() && selected.get() >= v.len() {
             set_selected.set(v.len() - 1);
         }
         v
     });
 
+    let reset = move || {
+        set_selected.set(0);
+        set_query.set(String::new());
+    };
+
     // Key navigation on the input
     let on_key = move |ev: KeyboardEvent| {
         let key = ev.key();
         let len = filtered.get().len();
-        if key == "ArrowDown" && len > 0 {
-            ev.prevent_default();
-            set_selected.update(|i| *i = (*i + 1).min(len - 1));
-        } else if key == "ArrowUp" && len > 0 {
-            ev.prevent_default();
-            set_selected.update(|i| *i = i.saturating_sub(1));
-        } else if key == "Enter" {
-            if let Some(app) = filtered.get().get(selected.get()).cloned() {
-                spawn_local(async move {
-                    let args =
-                        serde_wasm_bindgen::to_value(&OpenAppArgs { path: &app.path }).unwrap();
-                    let _ = invoke("open_app", args).await;
-                });
+        match key.as_str() {
+            "ArrowDown" => {
+                ev.prevent_default();
+                if len > 0 {
+                    set_selected.update(|i| *i = (*i + 1).min(len - 1));
+                }
             }
+            "ArrowUp" => {
+                ev.prevent_default();
+                if len > 0 {
+                    set_selected.update(|i| *i = i.saturating_sub(1));
+                }
+            }
+            "Enter" => {
+                if let Some(app) = filtered.get().get(selected.get()).cloned() {
+                    spawn_local(async move {
+                        let args =
+                            serde_wasm_bindgen::to_value(&OpenAppArgs { path: &app.path }).unwrap();
+                        let _ = invoke("open_app", args).await;
+                    });
+                }
+                reset();
+            }
+            "Escape" => {
+                println!("Escape pressed, hiding window");
+                spawn_local(async move {
+                    let _ = invoke(
+                        "hide_window",
+                        serde_wasm_bindgen::to_value(&Empty {}).unwrap(),
+                    )
+                    .await;
+                });
+                reset();
+            }
+            _ => {}
         }
     };
 
@@ -103,6 +128,7 @@ pub fn App() -> impl IntoView {
             <input
               id="search"
               placeholder="Type to fuzzy find…"
+              prop:value=move || query.get()
               on:input=on_input
               on:keydown=on_key
               autofocus

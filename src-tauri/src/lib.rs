@@ -1,19 +1,87 @@
 use serde::Serialize;
 use std::path::Path;
-#[cfg(target_os = "macos")]
 use tauri::ActivationPolicy;
 use tauri::{Manager, WindowEvent};
 use walkdir::WalkDir;
 
-#[tauri::command]
-fn greet(name: &str) -> String {
-    format!("Hello, {}! You've been greeted from Rust!", name)
-}
+#[cfg(target_os = "macos")]
+use objc2::runtime::AnyObject;
+#[cfg(target_os = "macos")]
+use objc2_app_kit::{NSApp, NSEvent, NSScreen, NSWindow, NSWindowCollectionBehavior};
+#[cfg(target_os = "macos")]
+use objc2_foundation::{MainThreadMarker, NSPoint, NSRect};
 
 #[derive(Serialize, Clone)]
 struct AppInfo {
     name: String,
     path: String,
+}
+
+#[cfg(target_os = "macos")]
+#[inline]
+fn point_in_rect(p: NSPoint, r: NSRect) -> bool {
+    p.x >= r.origin.x
+        && p.x <= r.origin.x + r.size.width
+        && p.y >= r.origin.y
+        && p.y <= r.origin.y + r.size.height
+}
+
+#[cfg(target_os = "macos")]
+fn reveal_on_active_space(app: &tauri::AppHandle) {
+    // Helper: is a point inside a rect?
+    let handle = app.clone();
+    let _ = app.run_on_main_thread(move || unsafe {
+        let mtm = MainThreadMarker::new_unchecked();
+
+        if let Some(win) = handle.get_webview_window("main") {
+            // Get NSWindow*
+
+            use objc2::rc::Retained;
+            let ptr = win.ns_window().expect("missing NSWindow");
+            let any = &*(ptr as *mut AnyObject);
+            let nswin: &NSWindow = any.downcast_ref::<NSWindow>().expect("not an NSWindow");
+
+            // Follow the active Space when activated.
+            let mut behavior = nswin.collectionBehavior();
+            behavior.insert(NSWindowCollectionBehavior::MoveToActiveSpace);
+
+            // Optional: make it show even over fullscreen Spaces, or on *all* Spaces.
+            // behavior.insert(NSWindowCollectionBehavior::FullScreenAuxiliary);
+            // behavior.insert(NSWindowCollectionBehavior::CanJoinAllSpaces);
+
+            nswin.setCollectionBehavior(behavior);
+
+            // Find the screen under the mouse.
+            let mouse = NSEvent::mouseLocation();
+            let screens = NSScreen::screens(mtm);
+            let mut target: Option<Retained<NSScreen>> = None;
+            let mut first: Option<Retained<NSScreen>> = None;
+
+            for s in screens.iter() {
+                if first.is_none() {
+                    first = Some(s.clone());
+                }
+                if point_in_rect(mouse, s.frame()) {
+                    target = Some(s);
+                    break;
+                }
+            }
+            let target = target.or(first).expect("no NSScreen available");
+            let sf = target.frame(); // screen frame (global coords)
+            let wf = nswin.frame(); // current window frame
+
+            // Center window on the chosen screen. Note: setFrameTopLeftPoint uses top-left origin.
+            let x = sf.origin.x + (sf.size.width - wf.size.width) / 2.0;
+            let y_top = sf.origin.y + sf.size.height - (sf.size.height - wf.size.height) / 2.0;
+            nswin.setFrameTopLeftPoint(NSPoint { x, y: y_top });
+
+            // Show + activate on that display/Space.
+            let _ = win.show();
+            NSApp(mtm).activate();
+            nswin.makeKeyAndOrderFront(None);
+            let _ = win.set_focus();
+        }
+    });
 }
 
 fn read_app_name(bundle_path: &Path) -> String {
@@ -73,24 +141,28 @@ fn open_app(app: tauri::AppHandle, path: String) -> Result<(), String> {
         .map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+fn hide_window(app: tauri::AppHandle) -> Result<(), String> {
+    if let Some(win) = app.get_webview_window("main") {
+        win.hide().map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
 pub fn run() {
     tauri::Builder::default()
-        // start at login so it’s “always running” after you log in
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             None,
         ))
-        // make sure only one instance ever runs
         .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
             if let Some(win) = app.get_webview_window("main") {
                 let _ = win.show();
                 let _ = win.set_focus();
             }
         }))
-        // register the ONE global shortcut with a toggle handler
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
-                // use "alt+space" to avoid Spotlight conflict; switch to "cmd+space" only if you disable Spotlight’s hotkey
                 .with_shortcut("cmd+space")
                 .unwrap()
                 .with_handler(|app, _shortcut, event| {
@@ -99,8 +171,7 @@ pub fn run() {
                             if win.is_visible().unwrap_or(false) {
                                 let _ = win.hide();
                             } else {
-                                let _ = win.show();
-                                let _ = win.set_focus();
+                                reveal_on_active_space(app);
                             }
                         }
                     }
@@ -123,7 +194,7 @@ pub fn run() {
             app.set_activation_policy(ActivationPolicy::Accessory);
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![greet, list_apps, open_app])
+        .invoke_handler(tauri::generate_handler![list_apps, open_app, hide_window])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
