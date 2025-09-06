@@ -100,23 +100,23 @@ fn fuzzy_match(text: &str, pattern: &str) -> bool {
     false
 }
 
-/* --------------------------------- Component ---------------------------------- */
+async fn fetch_and_apply_config() {
+    let cfg_val = invoke("get_config", JsValue::NULL).await;
+    if let Ok(cfg) = serde_wasm_bindgen::from_value::<UiConfig>(cfg_val) {
+        apply_ui_config(&cfg);
+    }
+}
 
+/* --------------------------------- Component ---------------------------------- */
 #[component]
 pub fn App() -> impl IntoView {
     let (apps, set_apps) = signal(Vec::<AppInfo>::new());
     let (query, set_query) = signal(String::new());
     let (selected, set_selected) = signal(0usize);
 
-    // On mount: fetch UI config (if available) then the app list.
     spawn_local(async move {
-        // Try to get config; ignore errors if backend command not present.
-        let cfg_val = invoke("get_config", JsValue::NULL).await;
-        if let Ok(cfg) = serde_wasm_bindgen::from_value::<UiConfig>(cfg_val) {
-            apply_ui_config(&cfg);
-        }
+        fetch_and_apply_config().await;
 
-        // Now fetch app list
         let js = invoke(
             "list_apps",
             serde_wasm_bindgen::to_value(&Empty {}).unwrap(),
@@ -197,6 +197,9 @@ pub fn App() -> impl IntoView {
               prop:value=move || query.get()
               on:input=on_input
               on:keydown=on_key
+              autocapitalize="off"
+              autocomplete="off"
+              spellcheck=false
               autofocus
             />
         </div>
