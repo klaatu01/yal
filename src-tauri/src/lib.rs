@@ -3,6 +3,7 @@ use std::path::Path;
 use tauri::ActivationPolicy;
 use tauri::{Manager, WindowEvent};
 use walkdir::WalkDir;
+mod config;
 
 #[cfg(target_os = "macos")]
 use objc2::runtime::AnyObject;
@@ -10,6 +11,38 @@ use objc2::runtime::AnyObject;
 use objc2_app_kit::{NSApp, NSEvent, NSScreen, NSWindow, NSWindowCollectionBehavior};
 #[cfg(target_os = "macos")]
 use objc2_foundation::{MainThreadMarker, NSPoint, NSRect};
+use std::sync::{Arc, RwLock};
+use tauri::LogicalSize;
+use tauri::Size;
+
+use config::{load_config, AppConfig};
+
+#[tauri::command]
+fn get_config(state: tauri::State<Arc<RwLock<AppConfig>>>) -> Result<AppConfig, String> {
+    Ok(state.read().unwrap().clone())
+}
+
+#[tauri::command]
+fn reload_config(
+    app: tauri::AppHandle,
+    state: tauri::State<Arc<RwLock<AppConfig>>>,
+) -> Result<AppConfig, String> {
+    let cfg = load_config();
+    apply_window_size(&app, &cfg);
+    *state.write().unwrap() = cfg.clone();
+    Ok(cfg)
+}
+
+fn apply_window_size(app: &tauri::AppHandle, cfg: &AppConfig) {
+    if let Some(win) = app.get_webview_window("main") {
+        if let (Some(w), Some(h)) = (cfg.w_width, cfg.w_height) {
+            let _ = win.set_size(Size::Logical(LogicalSize {
+                width: w,
+                height: h,
+            }));
+        }
+    }
+}
 
 #[derive(Serialize, Clone)]
 struct AppInfo {
@@ -190,11 +223,20 @@ pub fn run() {
             _ => {}
         })
         .setup(|app| {
+            let cfg = load_config();
+            apply_window_size(&app.handle(), &cfg);
+            app.manage(Arc::new(RwLock::new(cfg)));
             #[cfg(target_os = "macos")]
             app.set_activation_policy(ActivationPolicy::Accessory);
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![list_apps, open_app, hide_window])
+        .invoke_handler(tauri::generate_handler![
+            list_apps,
+            open_app,
+            hide_window,
+            get_config,
+            reload_config
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

@@ -6060,6 +6060,7 @@ dependencies = [
  "tauri-plugin-global-shortcut",
  "tauri-plugin-opener",
  "tauri-plugin-single-instance",
+ "toml 0.9.5",
  "walkdir",
 ]
 
