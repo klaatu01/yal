@@ -32,10 +32,13 @@ pub struct AppConfig {
     pub w_height: Option<f64>,
 
     // Alignment + margins (optional; defaults used if omitted)
-    pub align_h: Option<AlignH>, // "left" | "center" | "right"
-    pub align_v: Option<AlignV>, // "top"  | "center" | "bottom"
-    pub margin_x: Option<f64>,   // px inset from left/right edges (default ~12)
-    pub margin_y: Option<f64>,   // px inset from top/bottom edges (default ~12)
+    pub align_h: Option<AlignH>,  // "left" | "center" | "right"
+    pub align_v: Option<AlignV>,  // "top"  | "center" | "bottom"
+    pub margin_x: Option<f64>,    // px inset from left/right edges (default ~12)
+    pub margin_y: Option<f64>,    // px inset from top/bottom edges (default ~12)
+    pub padding: Option<f64>,     // px padding inside window (default ~6)
+    pub line_height: Option<f64>, // line height multiplier (default ~1.2)
+    pub w_radius: Option<f64>,    // window corner radius in px (default ~0)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]

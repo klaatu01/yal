@@ -35,7 +35,18 @@ pub fn apply(cfg: &AppConfig) {
             if let Some(px) = cfg.font_size {
                 let _ = style.set_property("--fs", &format!("{px}px")); // e.g. "14px"
             }
-            // If you want a custom line-height from config later, also set `--lh` here.
+
+            if let Some(pad) = &cfg.padding {
+                let _ = style.set_property("--pad", &format!("{pad}px"));
+            }
+
+            if let Some(lh) = &cfg.line_height {
+                let _ = style.set_property("--lh", &format!("{lh}"));
+            }
+
+            if let Some(rad) = &cfg.w_radius {
+                let _ = style.set_property("--radius", &format!("{rad}px"));
+            }
         }
     }
 }

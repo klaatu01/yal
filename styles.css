@@ -1,12 +1,12 @@
 /* dmenu-style minimal CSS with reliable font sizing via vars */
 :root {
-  --bg: #222;
+  --bg: #1e1e2e;
   /* from bg_color */
   --text: #bbbbbb;
   /* from font_bg_color (normal text) */
-  --hl: #005577;
+  --hl: #cdd6f4;
   /* from fg_color (highlight background) */
-  --hl-text: #000000;
+  --hl-text: #cdd6f4;
   /* from font_fg_color (text on highlight) */
 
   --bar-h: 32px;
@@ -20,6 +20,7 @@
   /* font size */
   --lh: 1.2;
   /* line height multiplier */
+  --radius: 0px;
 }
 
 * {
@@ -31,12 +32,12 @@ body {
   height: 100%;
   margin: 0;
   overflow: hidden;
-  /* no page scrollbars */
   background: var(--bg);
   color: var(--text);
   font-family: var(--font);
   font-size: var(--fs);
   line-height: var(--lh);
+  border-radius: var(--radius);
 }
 
 /* Top bar with input; draggable area for frameless Tauri windows */
@@ -46,9 +47,9 @@ body {
   display: flex;
   align-items: center;
   height: var(--bar-h);
-  padding: 0 var(--pad);
+  padding: var(--pad) var(--pad);
   background: var(--bg);
-  border-bottom: 1px solid #333;
+  border-bottom: 1px solid var(--bg);
   -webkit-app-region: drag;
 }
 
@@ -90,7 +91,7 @@ body {
 }
 
 .results li {
-  padding: 6px var(--pad);
+  padding: var(--pad) var(--pad);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
