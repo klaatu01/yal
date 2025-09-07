@@ -6134,7 +6134,7 @@ checksum = "fdd20c5420375476fbd4394763288da7eb0cc0b8c11deed431a91562af7335d3"
 
 [[package]]
 name = "yal"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "base64 0.21.7",
  "dirs 6.0.0",
@@ -6168,7 +6168,7 @@ dependencies = [
 
 [[package]]
 name = "yal-ui"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "console_error_panic_hook",
  "fuzzy-matcher",
