@@ -36,11 +36,10 @@ jobs:
       - name: Ensure Cargo bin is on PATH
         run: echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
 
-      - name: Install trunk, wasm-bindgen-cli, and cargo-tauri (v2)
-        run: |
-          cargo install trunk --locked || true
-          cargo install wasm-bindgen-cli --locked || true
-          cargo install tauri-cli --locked --version ^2 || true
+      - name: Install trunk, wasm-bindgen-cli, tauri-cli
+        uses: taiki-e/install-action@v2
+        with:
+          tool: trunk@0.21.14,wasm-bindgen-cli@0.2.101,tauri-cli@2
 
       - name: Build Leptos frontend (WASM) with trunk
         # adjust working-directory if your index.html is elsewhere
