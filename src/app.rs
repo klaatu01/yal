@@ -9,6 +9,8 @@ use wasm_bindgen::JsCast; // for unchecked_into / dyn_into
 extern "C" {
     #[wasm_bindgen(js_namespace = ["window", "__TAURI__", "core"])]
     async fn invoke(cmd: &str, args: JsValue) -> JsValue;
+    #[wasm_bindgen(js_namespace = ["window", "__TAURI__", "event"], js_name = listen)]
+    async fn tauri_listen(event: &str, callback: &js_sys::Function);
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
@@ -107,12 +109,41 @@ async fn fetch_and_apply_config() {
     }
 }
 
+fn init_config_listener(set_ui_cfg: WriteSignal<UiConfig>) {
+    leptos::task::spawn_local(async move {
+        let cb = Closure::<dyn FnMut(js_sys::Object)>::new(move |evt_obj: js_sys::Object| {
+            if let Ok(payload) = js_sys::Reflect::get(&evt_obj, &JsValue::from_str("payload")) {
+                if let Ok(cfg) = serde_wasm_bindgen::from_value::<UiConfig>(payload) {
+                    set_ui_cfg.set(cfg.clone());
+                    apply_ui_config(&cfg);
+                }
+            }
+        });
+
+        let _unlisten = tauri_listen("config://updated", cb.as_ref().unchecked_ref()).await;
+        cb.forget();
+    });
+}
+
 /* --------------------------------- Component ---------------------------------- */
 #[component]
 pub fn App() -> impl IntoView {
     let (apps, set_apps) = signal(Vec::<AppInfo>::new());
     let (query, set_query) = signal(String::new());
     let (selected, set_selected) = signal(0usize);
+    let (_, set_ui_cfg) = signal(UiConfig {
+        font: None,
+        font_size: None,
+        bg_color: None,
+        fg_color: None,
+        font_color: None,
+        font_fg_color: None,
+        font_bg_color: None,
+        w_width: None,
+        w_height: None,
+    });
+
+    init_config_listener(set_ui_cfg);
 
     spawn_local(async move {
         fetch_and_apply_config().await;

@@ -1,6 +1,6 @@
 use serde::Serialize;
 use std::path::Path;
-use tauri::ActivationPolicy;
+use tauri::{ActivationPolicy, Emitter};
 use tauri::{Manager, WindowEvent};
 use walkdir::WalkDir;
 mod config;
@@ -224,10 +224,77 @@ pub fn run() {
         })
         .setup(|app| {
             let cfg = load_config();
-            apply_window_size(&app.handle(), &cfg);
+            apply_window_size(app.handle(), &cfg);
             app.manage(Arc::new(RwLock::new(cfg)));
             #[cfg(target_os = "macos")]
             app.set_activation_policy(ActivationPolicy::Accessory);
+
+            {
+                use notify::{RecursiveMode, Watcher};
+                use std::{sync::mpsc, time::Duration};
+
+                let app_handle = app.handle().clone();
+                let state = app.state::<Arc<RwLock<AppConfig>>>().inner().clone();
+                let cfg_path = config::config_path();
+                let watch_dir = cfg_path
+                    .parent()
+                    .map(|p| p.to_path_buf())
+                    .unwrap_or_else(|| std::env::current_dir().unwrap());
+
+                std::thread::spawn(move || {
+                    let (tx, rx) = mpsc::channel();
+
+                    let mut watcher = notify::recommended_watcher(
+                        move |res: Result<notify::Event, notify::Error>| {
+                            let _ = tx.send(res);
+                        },
+                    )
+                    .expect("failed to create file watcher");
+
+                    watcher
+                        .watch(&watch_dir, RecursiveMode::NonRecursive)
+                        .expect("failed to watch config directory");
+
+                    // Simple debounce to avoid partial writes
+                    let mut last_reload = std::time::Instant::now();
+
+                    while let Ok(res) = rx.recv() {
+                        match res {
+                            Ok(event) => {
+                                // Only care if the changed path is the config file
+                                let relevant = event.paths.iter().any(|p| p == &cfg_path);
+                                if !relevant {
+                                    continue;
+                                }
+
+                                // debounce ~120ms
+                                if last_reload.elapsed() < Duration::from_millis(120) {
+                                    continue;
+                                }
+                                last_reload = std::time::Instant::now();
+                                std::thread::sleep(Duration::from_millis(50));
+
+                                // Reload + apply + push
+                                let new_cfg = config::load_config();
+
+                                {
+                                    let mut lock = state.write().unwrap();
+                                    *lock = new_cfg.clone();
+                                }
+
+                                // If your window sizing must happen on the main thread on macOS,
+                                // you can wrap this with `app_handle.run_on_main_thread(...)`.
+                                apply_window_size(&app_handle, &new_cfg);
+
+                                // Push to the frontend
+                                let _ = app_handle.emit("config://updated", new_cfg);
+                            }
+                            Err(err) => eprintln!("watch error: {err:?}"),
+                        }
+                    }
+                });
+            }
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

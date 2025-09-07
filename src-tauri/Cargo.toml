@@ -32,6 +32,7 @@ objc2 = "0.6.2"
 objc2-foundation = "0.3.1"
 objc2-app-kit = "0.3.1"
 toml = "0.9.5"
+notify = "8.2.0"
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-autostart = "2"
