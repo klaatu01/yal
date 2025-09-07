@@ -31,7 +31,7 @@ A tiny, no-nonsense app launcher. Press `⌘ Space`, type a few letters, hit `En
 
 ## Installation
 
-### Option A: Build from source (recommended)
+Build from source
 
 **Prereqs**
 
@@ -55,18 +55,6 @@ cargo tauri build
 ```
 
 > If your setup uses Trunk and you see an error about missing config, add a minimal `Trunk.toml` next to your web `index.html`, or follow the project’s existing structure.
-
-### Option B: Homebrew (if/when you publish)
-
-1. Create a GitHub Release that contains the signed `.dmg`/`.zip`.  
-2. Publish a tap with a Formula pointing to that asset.  
-3. Users can then:
-   ```bash
-   brew tap yourname/yal
-   brew install yal
-   ```
-
-(Left as an exercise for Future You™.)
 
 ---
 
