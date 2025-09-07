@@ -2,11 +2,9 @@
 
 A tiny, no-nonsense app launcher. Press `⌘ Space`, type a few letters, hit `Enter`. That’s it.
 
-- No accounts.  
-- No telemetry.  
-- No Terms & Conditions pop-ups.  
-- No “AI cloud magic.”  
-- Just a window, a list of apps, and your keyboard.
+---
+
+![yal](https://github.com/user-attachments/assets/1b3bb73f-17df-4037-8c03-667692a3d87c)
 
 ---
 
