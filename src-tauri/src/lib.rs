@@ -8,7 +8,10 @@ mod config;
 #[cfg(target_os = "macos")]
 use objc2::runtime::AnyObject;
 #[cfg(target_os = "macos")]
-use objc2_app_kit::{NSApp, NSEvent, NSScreen, NSWindow, NSWindowCollectionBehavior};
+use objc2_app_kit::{
+    NSApp, NSApplicationActivationOptions, NSEvent, NSRunningApplication, NSScreen, NSWindow,
+    NSWindowCollectionBehavior, NSWorkspace,
+};
 #[cfg(target_os = "macos")]
 use objc2_foundation::{MainThreadMarker, NSPoint, NSRect};
 use std::sync::{Arc, RwLock};
@@ -51,6 +54,13 @@ struct AppInfo {
 }
 
 #[cfg(target_os = "macos")]
+#[derive(Default)]
+struct FocusState {
+    /// PID of the app that was frontmost before we activated our palette window.
+    prev_pid: Option<i32>,
+}
+
+#[cfg(target_os = "macos")]
 #[inline]
 fn point_in_rect(p: NSPoint, r: NSRect) -> bool {
     p.x >= r.origin.x
@@ -59,16 +69,58 @@ fn point_in_rect(p: NSPoint, r: NSRect) -> bool {
         && p.y <= r.origin.y + r.size.height
 }
 
+fn hide_without_focus_restore(app: &tauri::AppHandle) {
+    if let Some(win) = app.get_webview_window("main") {
+        let _ = win.hide();
+    }
+}
+
+#[cfg(target_os = "macos")]
+/// Hide the main window and restore focus to whatever was frontmost before
+/// we activated our window. Falls back to `NSApp.deactivate()` if we don't
+/// have a recorded previous app.
+fn hide_and_focus_previous(app: &tauri::AppHandle) {
+    if let Some(win) = app.get_webview_window("main") {
+        let _ = win.hide();
+    }
+
+    // Read remembered PID (if any)
+    let pid_opt = app
+        .try_state::<Arc<RwLock<FocusState>>>()
+        .map(|s| s.read().unwrap().prev_pid);
+
+    let _ = app.run_on_main_thread(move || unsafe {
+        let mtm = MainThreadMarker::new_unchecked();
+
+        if let Some(Some(pid)) = pid_opt {
+            if let Some(prev) = NSRunningApplication::runningApplicationWithProcessIdentifier(pid) {
+                // Bring the previous app to front explicitly.
+                prev.activateWithOptions(NSApplicationActivationOptions::ActivateAllWindows);
+                return;
+            }
+        }
+
+        // Fallback: simply deactivate our app so macOS returns focus naturally.
+        NSApp(mtm).deactivate();
+    });
+}
+
 #[cfg(target_os = "macos")]
 fn reveal_on_active_space(app: &tauri::AppHandle) {
-    // Helper: is a point inside a rect?
     let handle = app.clone();
     let _ = app.run_on_main_thread(move || unsafe {
         let mtm = MainThreadMarker::new_unchecked();
 
         if let Some(win) = handle.get_webview_window("main") {
-            // Get NSWindow*
+            // Remember who was frontmost *before* we activate our window.
+            if let Some(state) = handle.try_state::<Arc<RwLock<FocusState>>>() {
+                let ws = NSWorkspace::sharedWorkspace();
+                if let Some(front) = ws.frontmostApplication() {
+                    state.write().unwrap().prev_pid = Some(front.processIdentifier());
+                }
+            }
 
+            // Get NSWindow*
             use objc2::rc::Retained;
             let ptr = win.ns_window().expect("missing NSWindow");
             let any = &*(ptr as *mut AnyObject);
@@ -77,11 +129,6 @@ fn reveal_on_active_space(app: &tauri::AppHandle) {
             // Follow the active Space when activated.
             let mut behavior = nswin.collectionBehavior();
             behavior.insert(NSWindowCollectionBehavior::MoveToActiveSpace);
-
-            // Optional: make it show even over fullscreen Spaces, or on *all* Spaces.
-            // behavior.insert(NSWindowCollectionBehavior::FullScreenAuxiliary);
-            // behavior.insert(NSWindowCollectionBehavior::CanJoinAllSpaces);
-
             nswin.setCollectionBehavior(behavior);
 
             // Find the screen under the mouse.
@@ -176,10 +223,19 @@ fn open_app(app: tauri::AppHandle, path: String) -> Result<(), String> {
 
 #[tauri::command]
 fn hide_window(app: tauri::AppHandle) -> Result<(), String> {
-    if let Some(win) = app.get_webview_window("main") {
-        win.hide().map_err(|e| e.to_string())?;
+    // Encapsulated behavior: hide + restore previous focus
+    #[cfg(target_os = "macos")]
+    {
+        hide_and_focus_previous(&app);
+        return Ok(());
     }
-    Ok(())
+    #[cfg(not(target_os = "macos"))]
+    {
+        if let Some(win) = app.get_webview_window("main") {
+            win.hide().map_err(|e| e.to_string())?;
+        }
+        Ok(())
+    }
 }
 
 pub fn run() {
@@ -202,7 +258,15 @@ pub fn run() {
                     if event.state() == tauri_plugin_global_shortcut::ShortcutState::Pressed {
                         if let Some(win) = app.get_webview_window("main") {
                             if win.is_visible().unwrap_or(false) {
-                                let _ = win.hide();
+                                // Encapsulated hide + restore
+                                #[cfg(target_os = "macos")]
+                                {
+                                    hide_and_focus_previous(app);
+                                }
+                                #[cfg(not(target_os = "macos"))]
+                                {
+                                    let _ = win.hide();
+                                }
                             } else {
                                 reveal_on_active_space(app);
                             }
@@ -214,11 +278,27 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .on_window_event(|win, ev| match ev {
             WindowEvent::Focused(false) => {
-                let _ = win.hide();
+                // Encapsulated hide + restore
+                #[cfg(target_os = "macos")]
+                {
+                    hide_without_focus_restore(win.app_handle());
+                }
+                #[cfg(not(target_os = "macos"))]
+                {
+                    let _ = win.hide();
+                }
             }
             WindowEvent::CloseRequested { api, .. } => {
                 api.prevent_close();
-                let _ = win.hide();
+                // Encapsulated hide + restore
+                #[cfg(target_os = "macos")]
+                {
+                    hide_and_focus_previous(win.app_handle());
+                }
+                #[cfg(not(target_os = "macos"))]
+                {
+                    let _ = win.hide();
+                }
             }
             _ => {}
         })
@@ -227,7 +307,11 @@ pub fn run() {
             apply_window_size(app.handle(), &cfg);
             app.manage(Arc::new(RwLock::new(cfg)));
             #[cfg(target_os = "macos")]
-            app.set_activation_policy(ActivationPolicy::Accessory);
+            {
+                app.set_activation_policy(ActivationPolicy::Accessory);
+                // Manage focus state for remembering the previously frontmost app
+                app.manage(Arc::new(RwLock::new(FocusState::default())));
+            }
 
             {
                 use notify::{RecursiveMode, Watcher};
@@ -282,8 +366,6 @@ pub fn run() {
                                     *lock = new_cfg.clone();
                                 }
 
-                                // If your window sizing must happen on the main thread on macOS,
-                                // you can wrap this with `app_handle.run_on_main_thread(...)`.
                                 apply_window_size(&app_handle, &new_cfg);
 
                                 // Push to the frontend
