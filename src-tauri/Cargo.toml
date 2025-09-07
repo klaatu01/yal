@@ -33,6 +33,7 @@ objc2-foundation = "0.3.1"
 objc2-app-kit = "0.3.1"
 toml = "0.9.5"
 notify = "8.2.0"
+yal-core = { path = "../crates/yal-core" }
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-autostart = "2"

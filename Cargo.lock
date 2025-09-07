@@ -1342,6 +1342,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "fuzzy-matcher"
+version = "0.3.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "54614a3312934d066701a80f20f15fa3b56d67ac7722b39eea5b4c9dd1d66c94"
+dependencies = [
+ "thread_local",
+]
+
+[[package]]
 name = "fxhash"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4912,6 +4921,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "thread_local"
+version = "1.1.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f60246a4944f24f6e018aa17cdeffb7818b76356965d03b07d6a9886e8962185"
+dependencies = [
+ "cfg-if",
+]
+
+[[package]]
 name = "throw_error"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6137,6 +6155,15 @@ dependencies = [
  "tauri-plugin-single-instance",
  "toml 0.9.5",
  "walkdir",
+ "yal-core",
+]
+
+[[package]]
+name = "yal-core"
+version = "0.0.0"
+dependencies = [
+ "serde",
+ "toml 0.9.5",
 ]
 
 [[package]]
@@ -6144,12 +6171,14 @@ name = "yal-ui"
 version = "0.1.0"
 dependencies = [
  "console_error_panic_hook",
+ "fuzzy-matcher",
  "js-sys",
  "leptos",
  "serde",
  "serde-wasm-bindgen",
  "wasm-bindgen",
  "wasm-bindgen-futures",
+ "yal-core",
 ]
 
 [[package]]

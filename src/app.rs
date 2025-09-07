@@ -1,9 +1,13 @@
 use leptos::task::spawn_local;
-use leptos::web_sys::window;
 use leptos::{ev::KeyboardEvent, prelude::*};
 use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast; // for unchecked_into / dyn_into
+use yal_core::{AppConfig, Command};
+
+// NEW: fuzzy matcher imports
+use fuzzy_matcher::skim::SkimMatcherV2;
+use fuzzy_matcher::FuzzyMatcher;
 
 #[wasm_bindgen]
 extern "C" {
@@ -13,109 +17,22 @@ extern "C" {
     async fn tauri_listen(event: &str, callback: &js_sys::Function);
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
-struct AppInfo {
-    name: String,
-    path: String,
-}
-
 #[derive(Serialize, Deserialize)]
-struct OpenAppArgs<'a> {
-    path: &'a str,
+struct RunCmdArgs {
+    cmd: Command,
 }
 
 #[derive(Serialize, Deserialize)]
 struct Empty {}
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
-struct UiConfig {
-    font: Option<String>,
-    font_size: Option<f32>,     // in px
-    bg_color: Option<String>,   // normal background
-    fg_color: Option<String>,   // highlight background
-    font_color: Option<String>, // (legacy) fallback for normal text if font_bg_color missing
-    // NEW:
-    font_fg_color: Option<String>, // text color ON highlight background
-    font_bg_color: Option<String>, // text color ON normal background
-    w_width: Option<f64>,
-    w_height: Option<f64>,
-}
+/* --------------------------------- Events ----------------------------------- */
 
-fn apply_ui_config(cfg: &UiConfig) {
-    if let Some(doc) = window().and_then(|w| w.document()) {
-        if let Some(root_el) = doc.document_element() {
-            // Cast <html> Element -> HtmlElement to use the inherent web_sys::HtmlElement::style()
-            let html_el: leptos::web_sys::HtmlElement = root_el.unchecked_into();
-            let style = html_el.style();
-
-            // Backgrounds
-            if let Some(v) = &cfg.bg_color {
-                let _ = style.set_property("--bg", v);
-            }
-            if let Some(v) = &cfg.fg_color {
-                // highlight background
-                let _ = style.set_property("--hl", v);
-            }
-
-            // Text colors
-            if let Some(v) = &cfg.font_bg_color {
-                // normal text (on --bg)
-                let _ = style.set_property("--text", v);
-            } else if let Some(v) = &cfg.font_color {
-                // backwards-compat fallback if user didn't set font_bg_color
-                let _ = style.set_property("--text", v);
-            }
-            if let Some(v) = &cfg.font_fg_color {
-                // text on highlight
-                let _ = style.set_property("--hl-text", v);
-            }
-
-            // Font family / size via CSS variables
-            if let Some(v) = &cfg.font {
-                let _ = style.set_property("--font", v);
-            }
-            if let Some(px) = cfg.font_size {
-                let _ = style.set_property("--fs", &format!("{px}px")); // e.g. "14px"
-            }
-            // If you want a custom line-height from config later, also set `--lh` here.
-        }
-    }
-}
-
-/* --------------------------------- Fuzzy match -------------------------------- */
-
-fn fuzzy_match(text: &str, pattern: &str) -> bool {
-    if pattern.is_empty() {
-        return true;
-    }
-    let p = pattern.to_lowercase();
-    let mut pc = p.chars();
-    let mut next = pc.next();
-    for c in text.to_lowercase().chars() {
-        if Some(c) == next {
-            next = pc.next();
-            if next.is_none() {
-                return true;
-            }
-        }
-    }
-    false
-}
-
-async fn fetch_and_apply_config() {
-    let cfg_val = invoke("get_config", JsValue::NULL).await;
-    if let Ok(cfg) = serde_wasm_bindgen::from_value::<UiConfig>(cfg_val) {
-        apply_ui_config(&cfg);
-    }
-}
-
-fn init_config_listener(set_ui_cfg: WriteSignal<UiConfig>) {
+fn init_config_listener() {
     leptos::task::spawn_local(async move {
         let cb = Closure::<dyn FnMut(js_sys::Object)>::new(move |evt_obj: js_sys::Object| {
             if let Ok(payload) = js_sys::Reflect::get(&evt_obj, &JsValue::from_str("payload")) {
-                if let Ok(cfg) = serde_wasm_bindgen::from_value::<UiConfig>(payload) {
-                    set_ui_cfg.set(cfg.clone());
-                    apply_ui_config(&cfg);
+                if let Ok(cfg) = serde_wasm_bindgen::from_value::<AppConfig>(payload) {
+                    crate::ui::apply(&cfg);
                 }
             }
         });
@@ -125,83 +42,143 @@ fn init_config_listener(set_ui_cfg: WriteSignal<UiConfig>) {
     });
 }
 
-/* --------------------------------- Component ---------------------------------- */
-#[component]
-pub fn App() -> impl IntoView {
-    let (apps, set_apps) = signal(Vec::<AppInfo>::new());
-    let (query, set_query) = signal(String::new());
-    let (selected, set_selected) = signal(0usize);
-    let (_, set_ui_cfg) = signal(UiConfig {
-        font: None,
-        font_size: None,
-        bg_color: None,
-        fg_color: None,
-        font_color: None,
-        font_fg_color: None,
-        font_bg_color: None,
-        w_width: None,
-        w_height: None,
+fn init_cmd_list_listener(set_cmd_list: WriteSignal<Vec<Command>>, reset: impl Fn() + 'static) {
+    leptos::task::spawn_local(async move {
+        let cb = Closure::<dyn FnMut(js_sys::Object)>::new(move |evt_obj: js_sys::Object| {
+            if let Ok(payload) = js_sys::Reflect::get(&evt_obj, &JsValue::from_str("payload")) {
+                if let Ok(cmds) = serde_wasm_bindgen::from_value::<Vec<Command>>(payload) {
+                    reset();
+                    set_cmd_list.set(cmds);
+                }
+            }
+        });
+
+        let _unlisten = tauri_listen("commands://updated", cb.as_ref().unchecked_ref()).await;
+        cb.forget();
     });
+}
 
-    init_config_listener(set_ui_cfg);
-
+fn load_config() {
     spawn_local(async move {
-        fetch_and_apply_config().await;
-
-        let js = invoke(
-            "list_apps",
+        let config = invoke(
+            "get_config",
             serde_wasm_bindgen::to_value(&Empty {}).unwrap(),
         )
         .await;
-        let list: Vec<AppInfo> = serde_wasm_bindgen::from_value(js).unwrap_or_default();
-        set_apps.set(list);
+        if let Ok(cfg) = serde_wasm_bindgen::from_value::<AppConfig>(config) {
+            crate::ui::apply(&cfg);
+        }
+    });
+}
+
+fn fuzzy_filter_commands(cmds: &[Command], query: &str) -> Vec<Command> {
+    let matcher = SkimMatcherV2::default();
+    let mut scored: Vec<(Command, i64)> = cmds
+        .iter()
+        .filter_map(|cmd| {
+            matcher
+                .fuzzy_match(cmd.name(), query)
+                .map(|score| (cmd.clone(), score))
+        })
+        .collect();
+
+    scored.sort_by(|a, b| {
+        b.1.cmp(&a.1) // higher score first
+            .then_with(|| a.0.name().to_lowercase().cmp(&b.0.name().to_lowercase()))
     });
 
-    // Derived filtered list
-    let filtered = Memo::new(move |_| {
-        let q = query.get();
-        let list = apps.get();
-        let v: Vec<AppInfo> = list
-            .into_iter()
-            .filter(|a| fuzzy_match(&a.name, &q))
-            .collect();
-        if !v.is_empty() && selected.get() >= v.len() {
-            set_selected.set(v.len() - 1);
-        }
-        v
-    });
+    scored.into_iter().map(|(cmd, _)| cmd).collect()
+}
+
+fn filter_memoized_commands(
+    cmds: &[Command],
+    query: &str,
+    selected: usize,
+    set_selected: &WriteSignal<usize>,
+) -> Vec<Command> {
+    let v: Vec<Command> = if query.trim().is_empty() {
+        let mut all = cmds.to_vec();
+        all.sort_by_key(|a| a.name().to_lowercase());
+        all
+    } else {
+        fuzzy_filter_commands(cmds, query)
+    };
+
+    if !v.is_empty() && selected >= v.len() {
+        set_selected.set(v.len() - 1);
+    }
+    v
+}
+
+/* --------------------------------- Component ---------------------------------- */
+#[component]
+pub fn App() -> impl IntoView {
+    let (cmds, set_cmd_list) = signal(Vec::<Command>::new());
+    let (query, set_query) = signal(String::new());
+    let (selected, set_selected) = signal(0usize);
 
     let reset = move || {
         set_selected.set(0);
         set_query.set(String::new());
     };
 
+    load_config();
+    init_config_listener();
+    init_cmd_list_listener(set_cmd_list, reset);
+
+    let filtered = Memo::new(move |_| {
+        let q = query.get();
+        let list = cmds.get();
+        filter_memoized_commands(&list, &q, selected.get(), &set_selected)
+    });
+
+    let open_selected = move || {
+        if let Some(cmd) = filtered.get().get(selected.get()).cloned() {
+            spawn_local(async move {
+                let args = serde_wasm_bindgen::to_value(&RunCmdArgs { cmd: cmd.clone() }).unwrap();
+                let _ = invoke("run_cmd", args).await;
+            });
+        }
+    };
+
+    let increment_selected = move || {
+        let len = filtered.get().len();
+        if len > 0 {
+            set_selected.update(|i| *i = (*i + 1).min(len - 1));
+        }
+    };
+
+    let decrement_selected = move || {
+        set_selected.update(|i| *i = i.saturating_sub(1));
+    };
+
     // Key navigation on the input
     let on_key = move |ev: KeyboardEvent| {
         let key = ev.key();
-        let len = filtered.get().len();
         match key.as_str() {
             "ArrowDown" => {
                 ev.prevent_default();
-                if len > 0 {
-                    set_selected.update(|i| *i = (*i + 1).min(len - 1));
-                }
+                increment_selected();
             }
             "ArrowUp" => {
                 ev.prevent_default();
-                if len > 0 {
-                    set_selected.update(|i| *i = i.saturating_sub(1));
-                }
+                decrement_selected();
+            }
+            "n" if ev.ctrl_key() => {
+                ev.prevent_default();
+                increment_selected();
+            }
+            "p" if ev.ctrl_key() => {
+                ev.prevent_default();
+                decrement_selected();
             }
             "Enter" => {
-                if let Some(app) = filtered.get().get(selected.get()).cloned() {
-                    spawn_local(async move {
-                        let args =
-                            serde_wasm_bindgen::to_value(&OpenAppArgs { path: &app.path }).unwrap();
-                        let _ = invoke("open_app", args).await;
-                    });
-                }
-                reset();
+                ev.prevent_default();
+                open_selected();
+            }
+            "y" if ev.ctrl_key() => {
+                ev.prevent_default();
+                open_selected();
             }
             "Escape" => {
                 spawn_local(async move {
@@ -211,7 +188,6 @@ pub fn App() -> impl IntoView {
                     )
                     .await;
                 });
-                reset();
             }
             _ => {}
         }
@@ -237,11 +213,11 @@ pub fn App() -> impl IntoView {
         <ul class="results">
             { move || {
                 let sel = selected.get();
-                filtered.get().into_iter().enumerate().map(|(i, app)| {
+                filtered.get().into_iter().enumerate().map(|(i, cmd)| {
                     let is_sel = i == sel;
                     view! {
                         <li class:is-selected=is_sel>
-                            { app.name.to_lowercase() }
+                            { cmd.name().to_lowercase() }
                         </li>
                     }
                 }).collect_view()
