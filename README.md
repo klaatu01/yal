@@ -151,4 +151,4 @@ w_height = 380.0
 
 ## License
 
-MIT. Use it, fork it, rebind it, ship it. No EULAs were harmed in the making of this launcher.
+MIT. Use it, fork it, rebind it, ship it.
