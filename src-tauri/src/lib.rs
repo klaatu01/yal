@@ -18,7 +18,7 @@ use std::sync::{Arc, RwLock};
 use tauri::LogicalSize;
 use tauri::Size;
 
-use config::{load_config, AppConfig};
+use config::{load_config, AlignH, AlignV, AppConfig};
 
 #[tauri::command]
 fn get_config(state: tauri::State<Arc<RwLock<AppConfig>>>) -> Result<AppConfig, String> {
@@ -106,6 +106,49 @@ fn hide_and_focus_previous(app: &tauri::AppHandle) {
 }
 
 #[cfg(target_os = "macos")]
+fn clamp(v: f64, lo: f64, hi: f64) -> f64 {
+    if v < lo {
+        lo
+    } else if v > hi {
+        hi
+    } else {
+        v
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn compute_top_left_for_alignment(
+    sf: NSRect, // screen frame (global coords)
+    wf: NSRect, // current window frame (size)
+    ah: AlignH,
+    av: AlignV,
+    mx: f64,
+    my: f64,
+) -> NSPoint {
+    // Horizontal placement
+    let mut x = match ah {
+        AlignH::Left => sf.origin.x + mx,
+        AlignH::Center => sf.origin.x + (sf.size.width - wf.size.width) / 2.0,
+        AlignH::Right => sf.origin.x + sf.size.width - wf.size.width - mx,
+    };
+    let min_x = sf.origin.x;
+    let max_x = sf.origin.x + sf.size.width - wf.size.width;
+    x = clamp(x, min_x, max_x);
+
+    // Vertical placement: NSWindow::setFrameTopLeftPoint uses top-left coordinates
+    let mut y = match av {
+        AlignV::Top => sf.origin.y + sf.size.height - my,
+        AlignV::Center => sf.origin.y + sf.size.height - (sf.size.height - wf.size.height) / 2.0,
+        AlignV::Bottom => sf.origin.y + wf.size.height + my,
+    };
+    let min_y = sf.origin.y + wf.size.height; // bottom edge + window height
+    let max_y = sf.origin.y + sf.size.height; // top edge
+    y = clamp(y, min_y, max_y);
+
+    NSPoint { x, y }
+}
+
+#[cfg(target_os = "macos")]
 fn reveal_on_active_space(app: &tauri::AppHandle) {
     let handle = app.clone();
     let _ = app.run_on_main_thread(move || unsafe {
@@ -150,10 +193,19 @@ fn reveal_on_active_space(app: &tauri::AppHandle) {
             let sf = target.frame(); // screen frame (global coords)
             let wf = nswin.frame(); // current window frame
 
-            // Center window on the chosen screen. Note: setFrameTopLeftPoint uses top-left origin.
-            let x = sf.origin.x + (sf.size.width - wf.size.width) / 2.0;
-            let y_top = sf.origin.y + sf.size.height - (sf.size.height - wf.size.height) / 2.0;
-            nswin.setFrameTopLeftPoint(NSPoint { x, y: y_top });
+            // Read alignment config with sensible defaults
+            let cfg = handle
+                .try_state::<Arc<RwLock<AppConfig>>>()
+                .map(|s| s.read().unwrap().clone())
+                .unwrap_or_default();
+            let ah = cfg.align_h.unwrap_or(AlignH::Center);
+            let av = cfg.align_v.unwrap_or(AlignV::Center);
+            let mx = cfg.margin_x.unwrap_or(12.0);
+            let my = cfg.margin_y.unwrap_or(12.0);
+
+            // Position window per alignment + margins
+            let top_left = compute_top_left_for_alignment(sf, wf, ah, av, mx, my);
+            nswin.setFrameTopLeftPoint(top_left);
 
             // Show + activate on that display/Space.
             let _ = win.show();
@@ -162,6 +214,15 @@ fn reveal_on_active_space(app: &tauri::AppHandle) {
             let _ = win.set_focus();
         }
     });
+}
+
+#[cfg(not(target_os = "macos"))]
+fn reveal_on_active_space(app: &tauri::AppHandle) {
+    // Non-macOS fallback: just show + focus
+    if let Some(win) = app.get_webview_window("main") {
+        let _ = win.show();
+        let _ = win.set_focus();
+    }
 }
 
 fn read_app_name(bundle_path: &Path) -> String {
@@ -367,6 +428,53 @@ pub fn run() {
                                 }
 
                                 apply_window_size(&app_handle, &new_cfg);
+
+                                // Reposition immediately on macOS according to new alignment
+                                #[cfg(target_os = "macos")]
+                                {
+                                    let _app_handle = app_handle.clone();
+                                    let _ = app_handle.run_on_main_thread(move || unsafe {
+                                        use objc2::rc::Retained;
+                                        let mtm = MainThreadMarker::new_unchecked();
+                                        if let Some(win) = _app_handle.get_webview_window("main") {
+                                            if let Ok(ptr) = win.ns_window() {
+                                                let any = &*(ptr as *mut AnyObject);
+                                                let nswin: &NSWindow = any
+                                                    .downcast_ref::<NSWindow>()
+                                                    .expect("not an NSWindow");
+
+                                                let mouse = NSEvent::mouseLocation();
+                                                let screens = NSScreen::screens(mtm);
+                                                let mut target: Option<Retained<NSScreen>> = None;
+                                                let mut first: Option<Retained<NSScreen>> = None;
+                                                for s in screens.iter() {
+                                                    if first.is_none() {
+                                                        first = Some(s.clone());
+                                                    }
+                                                    if point_in_rect(mouse, s.frame()) {
+                                                        target = Some(s);
+                                                        break;
+                                                    }
+                                                }
+                                                let target = target
+                                                    .or(first)
+                                                    .expect("no NSScreen available");
+                                                let sf = target.frame();
+                                                let wf = nswin.frame();
+
+                                                let ah = new_cfg.align_h.unwrap_or(AlignH::Center);
+                                                let av = new_cfg.align_v.unwrap_or(AlignV::Center);
+                                                let mx = new_cfg.margin_x.unwrap_or(12.0);
+                                                let my = new_cfg.margin_y.unwrap_or(12.0);
+
+                                                let top_left = compute_top_left_for_alignment(
+                                                    sf, wf, ah, av, mx, my,
+                                                );
+                                                nswin.setFrameTopLeftPoint(top_left);
+                                            }
+                                        }
+                                    });
+                                }
 
                                 // Push to the frontend
                                 let _ = app_handle.emit("config://updated", new_cfg);

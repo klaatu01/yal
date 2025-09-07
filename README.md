@@ -103,17 +103,21 @@ w_height = 380.0
 
 ### Config reference
 
-| Key             | Type   |  Description |
-|-----------------|--------|--------------|
-| `font`          | string |  CSS `font-family` stack applied to the UI. |
-| `font_size`     | float  |  Base font size in **px** (e.g., `14.0`). |
-| `bg_color`      | string |  Background color of the app (CSS color). |
-| `fg_color`      | string |  **Highlight background** for the selected list item. |
-| `font_bg_color` | string |  Text color for normal rows (text on `bg_color`). |
-| `font_fg_color` | string |  Text color for the selected row (text on `fg_color`). |
-| `font_color`    | string |  **Legacy fallback** for `font_bg_color` if that’s unset. |
-| `w_width`       | float  |  Window width in logical points. |
-| `w_height`      | float  |  Window height in logical points. |
+| Key             | Type   |  Description                                                                        |
+| --------------- | ------ |  ---------------------------------------------------------------------------------- |
+| `font`          | string |  CSS `font-family` stack applied to the UI.                                         |
+| `font_size`     | float  |  Base font size in **px** (e.g., `14.0`).                                           |
+| `bg_color`      | string |  Background color of the app (CSS color).                                           |
+| `fg_color`      | string |  **Highlight background** for the selected list item.                               |
+| `font_bg_color` | string |  Text color for normal rows (text on `bg_color`).                                   |
+| `font_fg_color` | string |  Text color for the selected row (text on `fg_color`).                              |
+| `font_color`    | string |  **Legacy fallback** for `font_bg_color` if that’s unset.                           |
+| `w_width`       | float  |  Window width in logical points.                                                    |
+| `w_height`      | float  |  Window height in logical points.                                                   |
+| `align_h`       | string |  Horizontal alignment on the active display (`left`\|`center`\|`right`).            |
+| `align_v`       | string |  Vertical alignment on the active display (`top`\|`center`\|`bottom`).              |
+| `margin_x`      | float  |  Inset from the left/right screen edge (used with `align_h = "left"` or `"right"`). |
+| `margin_y`      | float  |  Inset from the top/bottom screen edge (used with `align_v = "top"` or `"bottom"`). |
 
 > Any value you omit falls back to the built-in theme. Change the file while YAL is open to see it live-update.
 
