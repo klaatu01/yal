@@ -40,9 +40,7 @@ jobs:
         run: |
           cargo install trunk --locked || true
           cargo install wasm-bindgen-cli --locked || true
-          cargo install cargo-tauri --locked --version ^2 || true
-          cargo --list | sed -n '/Installed Commands/,$p' | grep -E '^\s+tauri\b' || (echo "cargo tauri not installed" && exit 1)
-          cargo tauri --version
+          cargo install tauri-cli --locked --version ^2 || true
 
       - name: Build Leptos frontend (WASM) with trunk
         # adjust working-directory if your index.html is elsewhere
