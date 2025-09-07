@@ -13,10 +13,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Apple Silicon (M1/M2/M3)
           - runner: macos-14
             target: aarch64-apple-darwin
-          # Intel macOS
           - runner: macos-13
             target: x86_64-apple-darwin
 
@@ -35,15 +33,19 @@ jobs:
         with:
           workspaces: './src-tauri -> target'
 
-      - name: Install trunk, wasm-bindgen-cli, and Tauri CLI (v2)
+      - name: Ensure Cargo bin is on PATH
+        run: echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+
+      - name: Install trunk, wasm-bindgen-cli, and cargo-tauri (v2)
         run: |
           cargo install trunk --locked || true
           cargo install wasm-bindgen-cli --locked || true
-          cargo install tauri-cli --locked --version ^2 || true
-          cargo --list | grep -E '^    tauri\b' || (echo "cargo tauri not installed" && exit 1)
+          cargo install cargo-tauri --locked --version ^2 || true
+          cargo --list | sed -n '/Installed Commands/,$p' | grep -E '^\s+tauri\b' || (echo "cargo tauri not installed" && exit 1)
+          cargo tauri --version
 
       - name: Build Leptos frontend (WASM) with trunk
-        # If your index.html/Cargo.toml live elsewhere, set working-directory accordingly.
+        # adjust working-directory if your index.html is elsewhere
         working-directory: .
         run: trunk build --release
 
