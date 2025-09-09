@@ -56,6 +56,12 @@ cargo tauri build
 
 > If your setup uses Trunk and you see an error about missing config, add a minimal `Trunk.toml` next to your web `index.html`, or follow the project’s existing structure.
 
+Install from Homebew
+
+```bash
+brew install --cask --no-quarantine klaatu01/tap/yal
+```
+
 ---
 
 ## Usage
