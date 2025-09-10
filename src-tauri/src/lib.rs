@@ -16,7 +16,7 @@ use std::sync::{Arc, RwLock};
 use tauri::{LogicalSize, Size};
 
 use config::load_config;
-use yal_core::{AlignH, AlignV, AppConfig};
+use yal_core::{AlignH, AlignV, AppConfig, Command};
 
 // ========== Shared: Config state & Tauri commands ==========
 
@@ -56,7 +56,7 @@ fn apply_window_size(app: &tauri::AppHandle, cfg: &AppConfig) {
 }
 
 fn publish_cmd_list(app: &tauri::AppHandle) {
-    let cmds = cmd::get_cmds();
+    let cmds: Vec<_> = cmd::get_cmds();
     let _ = app.emit("commands://updated", cmds);
 }
 
@@ -311,6 +311,7 @@ fn spawn_config_watcher(app: &tauri::AppHandle, state: Arc<RwLock<AppConfig>>) {
 
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_log::Builder::new().build())
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             None,

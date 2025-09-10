@@ -3,7 +3,7 @@ use leptos::{ev::KeyboardEvent, prelude::*};
 use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast; // for unchecked_into / dyn_into
-use yal_core::{AppConfig, Command};
+use yal_core::{AppConfig, Command, CommandKind};
 
 // NEW: fuzzy matcher imports
 use fuzzy_matcher::skim::SkimMatcherV2;
@@ -95,13 +95,23 @@ fn filter_memoized_commands(
     query: &str,
     selected: usize,
     set_selected: &WriteSignal<usize>,
+    filter: Option<CommandKind>,
 ) -> Vec<Command> {
+    let commands = if let Some(kind) = filter {
+        cmds.iter()
+            .filter(|c| kind.is_kind(c))
+            .cloned()
+            .collect::<Vec<_>>()
+    } else {
+        cmds.to_vec()
+    };
+
     let v: Vec<Command> = if query.trim().is_empty() {
-        let mut all = cmds.to_vec();
+        let mut all = commands.to_vec();
         all.sort_by_key(|a| a.name().to_lowercase());
         all
     } else {
-        fuzzy_filter_commands(cmds, query)
+        fuzzy_filter_commands(&commands, query)
     };
 
     if !v.is_empty() && selected >= v.len() {
@@ -116,6 +126,7 @@ pub fn App() -> impl IntoView {
     let (cmds, set_cmd_list) = signal(Vec::<Command>::new());
     let (query, set_query) = signal(String::new());
     let (selected, set_selected) = signal(0usize);
+    let (filter, set_filter) = signal(Option::<CommandKind>::None);
 
     let reset = move || {
         set_selected.set(0);
@@ -129,7 +140,8 @@ pub fn App() -> impl IntoView {
     let filtered = Memo::new(move |_| {
         let q = query.get();
         let list = cmds.get();
-        filter_memoized_commands(&list, &q, selected.get(), &set_selected)
+        let filter = filter.get();
+        filter_memoized_commands(&list, &q, selected.get(), &set_selected, filter)
     });
 
     let open_selected = move || {
@@ -180,6 +192,24 @@ pub fn App() -> impl IntoView {
                 ev.prevent_default();
                 open_selected();
             }
+            "f" if ev.ctrl_key() => {
+                ev.prevent_default();
+                set_filter.update(|f| {
+                    *f = match f {
+                        Some(CommandKind::Switch) => None,
+                        _ => Some(CommandKind::Switch),
+                    }
+                });
+            }
+            "o" if ev.ctrl_key() => {
+                ev.prevent_default();
+                set_filter.update(|f| {
+                    *f = match f {
+                        Some(CommandKind::App) => None,
+                        _ => Some(CommandKind::App),
+                    }
+                });
+            }
             "Escape" => {
                 spawn_local(async move {
                     let _ = invoke(
@@ -217,7 +247,13 @@ pub fn App() -> impl IntoView {
                     let is_sel = i == sel;
                     view! {
                         <li class:is-selected=is_sel>
-                            { cmd.name().to_lowercase() }
+                            {
+                                if filter.get().is_none() {
+                                    cmd.to_string()
+                                } else {
+                                    cmd.name().to_string()
+                                }
+                                .to_lowercase() }
                         </li>
                     }
                 }).collect_view()
