@@ -66,6 +66,7 @@ pub fn list_switch_targets() -> Vec<WindowTarget> {
                             } else {
                                 w.owner_name.clone().unwrap_or_default()
                             },
+                            window_id: w.info.window_id as i64,
                         });
                     }
                 }
@@ -104,6 +105,7 @@ type AXUIElementRef = *const c_void;
 #[link(name = "ApplicationServices", kind = "framework")]
 extern "C" {
     fn AXIsProcessTrustedWithOptions(options: CFTypeRef) -> bool;
+    fn AXUIElementCreateSystemWide() -> AXUIElementRef; // NEW
 
     fn AXUIElementCreateApplication(pid: i32) -> AXUIElementRef;
     fn AXUIElementCopyAttributeValue(
@@ -172,6 +174,11 @@ fn ax_focus_window_by_title(pid: i32, target_title: &str) -> Result<(), String> 
     let ax_title = cfstr("AXTitle");
     let ax_raise = cfstr("AXRaise");
     let ax_main = cfstr("AXMain");
+    let ax_focused_window = cfstr("AXFocusedWindow"); // NEW
+    let ax_focused_app = cfstr("AXFocusedApplication"); // NEW
+    let ax_hidden = cfstr("AXHidden");
+    let ax_frontmost = cfstr("AXFrontmost");
+    let ax_minimized = cfstr("AXMinimized");
 
     for i in 0..count {
         let w_ref = unsafe { CFArrayGetValueAtIndex(windows_arr, i) } as AXUIElementRef;
@@ -193,10 +200,13 @@ fn ax_focus_window_by_title(pid: i32, target_title: &str) -> Result<(), String> 
         let title = unsafe { CFString::wrap_under_create_rule(title_ref as _) }.to_string();
 
         if title == target_title {
+            // 1) Bring the window forward
             let r = unsafe { AXUIElementPerformAction(w_ref, ax_raise.as_concrete_TypeRef() as _) };
             if r != 0 {
                 return Err("AXRaise failed".into());
             }
+
+            // 2) Mark it as main (harmless but not sufficient alone)
             let _ = unsafe {
                 AXUIElementSetAttributeValue(
                     w_ref,
@@ -204,6 +214,55 @@ fn ax_focus_window_by_title(pid: i32, target_title: &str) -> Result<(), String> 
                     CFBoolean::true_value().as_CFTypeRef(),
                 )
             };
+
+            // 3) Make it the *focused* window
+            let fr = unsafe {
+                AXUIElementSetAttributeValue(
+                    app,
+                    ax_focused_window.as_concrete_TypeRef() as _,
+                    w_ref as CFTypeRef,
+                )
+            };
+            if fr != 0 {
+                // not fatal, but loggable
+                log::warn!("Setting AXFocusedWindow returned {}", fr);
+            }
+
+            let _ = unsafe {
+                AXUIElementSetAttributeValue(
+                    app,
+                    ax_hidden.as_concrete_TypeRef() as _,
+                    CFBoolean::false_value().as_CFTypeRef(),
+                )
+            };
+            let _ = unsafe {
+                AXUIElementSetAttributeValue(
+                    w_ref,
+                    ax_minimized.as_concrete_TypeRef() as _,
+                    CFBoolean::false_value().as_CFTypeRef(),
+                )
+            };
+
+            let _ = unsafe {
+                AXUIElementSetAttributeValue(
+                    app,
+                    ax_frontmost.as_concrete_TypeRef() as _,
+                    CFBoolean::true_value().as_CFTypeRef(),
+                )
+            };
+
+            // 4) (Optional but helps) mark the app as focused at system level
+            let sys = unsafe { AXUIElementCreateSystemWide() };
+            if !sys.is_null() {
+                let _ = unsafe {
+                    AXUIElementSetAttributeValue(
+                        sys,
+                        ax_focused_app.as_concrete_TypeRef() as _,
+                        app as CFTypeRef,
+                    )
+                };
+            }
+
             return Ok(());
         }
     }
@@ -216,6 +275,7 @@ fn activate_app_by_pid(pid: i32) -> Result<(), String> {
         let app: Option<Retained<NSRunningApplication>> =
             NSRunningApplication::runningApplicationWithProcessIdentifier(pid);
         if let Some(app) = app {
+            // Important: ignore other apps to actually transfer key focus
             app.activateWithOptions(NSApplicationActivationOptions::ActivateAllWindows);
             Ok(())
         } else {

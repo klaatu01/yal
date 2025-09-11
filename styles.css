@@ -1,26 +1,25 @@
-/* dmenu-style minimal CSS with reliable font sizing via vars */
 :root {
   --bg: #1e1e2e;
-  /* from bg_color */
   --text: #bbbbbb;
-  /* from font_bg_color (normal text) */
   --hl: #cdd6f4;
-  /* from fg_color (highlight background) */
   --hl-text: #cdd6f4;
-  /* from font_fg_color (text on highlight) */
 
   --bar-h: 32px;
   --pad: 8px;
 
   --font: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
     "Liberation Mono", "Courier New", monospace;
-
-  /* Font sizing (configurable) */
   --fs: 14px;
-  /* font size */
   --lh: 1.2;
-  /* line height multiplier */
   --radius: 0px;
+
+  /* New: prefix/input tuning */
+  --prefix-gap: 8px;
+  /* space between prefix and input */
+  --prefix-opacity: 0.7;
+  /* visual weight of the prefix text */
+  --input-h: 24px;
+  /* input height; tweak with bar height as needed */
 }
 
 * {
@@ -40,12 +39,13 @@ body {
   border-radius: var(--radius);
 }
 
-/* Top bar with input; draggable area for frameless Tauri windows */
+/* Top bar: prefix + input sit inline; gap is a CSS var */
 #bar {
   position: sticky;
   top: 0;
   display: flex;
   align-items: center;
+  gap: var(--prefix-gap);
   height: var(--bar-h);
   padding: var(--pad) var(--pad);
   background: var(--bg);
@@ -53,10 +53,22 @@ body {
   -webkit-app-region: drag;
 }
 
+/* Prefix is visible text, doesn’t intercept clicks, and is non-draggable */
+.input-prefix {
+  opacity: var(--prefix-opacity);
+  pointer-events: none;
+  /* avoids stealing focus/clicks */
+  -webkit-app-region: no-drag;
+  /* keep the bar draggable elsewhere */
+  font: inherit;
+  user-select: none;
+}
+
+/* Input fills remaining width; no special padding needed */
 #search {
   -webkit-app-region: no-drag;
   flex: 1;
-  height: 24px;
+  height: var(--input-h);
   padding: 2px 4px;
   margin: 0;
   border: none;
@@ -65,14 +77,13 @@ body {
   color: var(--text);
   font: inherit;
   caret-color: var(--hl);
-  /* accent caret */
 }
 
 #search::placeholder {
   color: #777;
 }
 
-/* Results list: scrollable but scrollbar hidden */
+/* Results list */
 .results {
   list-style: none;
   margin: 0;
@@ -81,11 +92,9 @@ body {
   overflow-y: auto;
   overflow-x: hidden;
   scrollbar-width: none;
-  /* Firefox */
 }
 
 .results::-webkit-scrollbar {
-  /* WebKit/Blink (Tauri) */
   width: 0;
   height: 0;
 }

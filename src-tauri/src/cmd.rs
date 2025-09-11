@@ -1,17 +1,33 @@
 use tauri_plugin_opener::OpenerExt;
 use yal_core::{AppInfo, Command, WindowTarget};
 
-use crate::cmd::app::get_app_info;
+use crate::cmd::{
+    app::get_app_info,
+    hide::{set_previous_focus_state, FocusState},
+};
 
 mod app;
+pub mod hide;
 pub mod switch;
 
 #[tauri::command]
 pub fn run_cmd(app: tauri::AppHandle, cmd: Command) -> Result<(), String> {
-    app.hide().unwrap();
     match cmd {
         Command::App(app_info) => run_app_cmd(app, app_info),
-        Command::Switch(target) => run_switch_cmd(target),
+        Command::Switch(target) => {
+            let pid = target.pid;
+            let window_id = target.window_id;
+            set_previous_focus_state(
+                &app,
+                FocusState {
+                    prev_pid: Some(pid),
+                    window_id: Some(window_id),
+                },
+            );
+            hide::hide(&app, hide::HideBehavior::FocusNew { pid, window_id });
+
+            Ok(())
+        }
     }
 }
 

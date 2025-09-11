@@ -1,6 +1,6 @@
 #![cfg(target_os = "macos")]
 
-use lightsky::{Lightsky, WindowListOptions};
+use lightsky::{Lightsky, WindowKindFilter, WindowListOptions};
 
 fn main() -> anyhow::Result<()> {
     let sky = Lightsky::new()?;
@@ -10,8 +10,11 @@ fn main() -> anyhow::Result<()> {
         for space in display.spaces {
             println!("  Space ID: {}", space.id);
             println!("  Windows:");
-            let windows =
-                sky.windows_in_spaces_app_only_with_titles(&[space.id], WindowListOptions::all())?;
+            let windows = sky.get_windows_in_space_with_titles(
+                space.id,
+                WindowListOptions::all(),
+                WindowKindFilter::APP,
+            )?;
             for window in windows {
                 println!("    Window ID: {}", window.info.window_id);
                 println!("      Level: {}", window.info.level);

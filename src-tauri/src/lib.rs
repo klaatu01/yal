@@ -3,7 +3,10 @@ use tauri::{ActivationPolicy, Emitter, Manager, WindowEvent};
 mod cmd;
 mod config;
 
-use crate::cmd::run_cmd;
+use crate::cmd::{
+    hide::{hide, remember_current_frontmost, FocusState, HideBehavior},
+    run_cmd,
+};
 
 use objc2::runtime::AnyObject;
 use objc2_app_kit::{
@@ -67,17 +70,7 @@ fn reveal_palette(app: &tauri::AppHandle) {
 }
 
 fn hide_palette_window(app: &tauri::AppHandle) {
-    hide_and_focus_previous(app);
-}
-
-fn hide_without_focus_restore_cross(app: &tauri::AppHandle) {
-    hide_without_focus_restore(app);
-}
-
-#[derive(Default)]
-struct FocusState {
-    /// PID of the app that was frontmost before we activated our palette window.
-    prev_pid: Option<i32>,
+    hide(app, HideBehavior::FocusPrevious);
 }
 
 #[inline]
@@ -86,38 +79,6 @@ fn point_in_rect(p: NSPoint, r: NSRect) -> bool {
         && p.x <= r.origin.x + r.size.width
         && p.y >= r.origin.y
         && p.y <= r.origin.y + r.size.height
-}
-
-fn hide_without_focus_restore(app: &tauri::AppHandle) {
-    if let Some(win) = app.get_webview_window("main") {
-        let _ = win.hide();
-    }
-}
-
-/// Hide the main window and restore focus to whatever was frontmost before
-/// we activated our window. Falls back to `NSApp.deactivate()` if unknown.
-fn hide_and_focus_previous(app: &tauri::AppHandle) {
-    if let Some(win) = app.get_webview_window("main") {
-        let _ = win.hide();
-    }
-
-    // Read remembered PID (if any)
-    let pid_opt = app
-        .try_state::<Arc<RwLock<FocusState>>>()
-        .map(|s| s.read().unwrap().prev_pid);
-
-    let _ = app.run_on_main_thread(move || unsafe {
-        let mtm = MainThreadMarker::new_unchecked();
-
-        if let Some(Some(pid)) = pid_opt {
-            if let Some(prev) = NSRunningApplication::runningApplicationWithProcessIdentifier(pid) {
-                prev.activateWithOptions(NSApplicationActivationOptions::ActivateAllWindows);
-                return;
-            }
-        }
-
-        NSApp(mtm).deactivate();
-    });
 }
 
 fn clamp(v: f64, lo: f64, hi: f64) -> f64 {
@@ -159,18 +120,6 @@ fn compute_top_left_for_alignment(
     y = clamp(y, min_y, max_y);
 
     NSPoint { x, y }
-}
-
-fn remember_frontmost_pid(app: &tauri::AppHandle) {
-    if let Some(state) = app.try_state::<Arc<RwLock<FocusState>>>() {
-        unsafe {
-            let ws = NSWorkspace::sharedWorkspace();
-            // This call is thread-affine, but we only read the PID; safe enough in practice.
-            if let Some(front) = ws.frontmostApplication() {
-                state.write().unwrap().prev_pid = Some(front.processIdentifier());
-            }
-        };
-    }
 }
 
 fn position_main_window_on_mouse_display(app: &tauri::AppHandle, cfg: &AppConfig) {
@@ -225,7 +174,7 @@ fn position_main_window_on_mouse_display(app: &tauri::AppHandle, cfg: &AppConfig
 }
 
 fn reveal_on_active_space(app: &tauri::AppHandle) {
-    remember_frontmost_pid(app);
+    remember_current_frontmost(app);
     position_main_window_on_mouse_display(app, &current_cfg_or_default(app));
 
     if let Some(win) = app.get_webview_window("main") {
@@ -344,7 +293,7 @@ pub fn run() {
         .on_window_event(|win, ev| match ev {
             WindowEvent::Focused(false) => {
                 // On blur, hide without bringing previous app to front (mac) to avoid focus ping-pong
-                hide_without_focus_restore_cross(win.app_handle());
+                hide_palette_window(win.app_handle());
             }
             WindowEvent::CloseRequested { api, .. } => {
                 api.prevent_close();
@@ -357,7 +306,10 @@ pub fn run() {
             apply_window_size(app.handle(), &cfg);
             app.manage(Arc::new(RwLock::new(cfg)));
             app.set_activation_policy(ActivationPolicy::Accessory);
-            app.manage(Arc::new(RwLock::new(FocusState::default())));
+            app.manage(RwLock::new(FocusState {
+                prev_pid: None,
+                window_id: None,
+            }));
 
             let cfg_state = app.state::<Arc<RwLock<AppConfig>>>().inner().clone();
             spawn_config_watcher(&app.handle().clone(), cfg_state);

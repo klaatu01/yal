@@ -52,6 +52,7 @@ pub struct WindowTarget {
     pub app_name: String,
     pub title: Option<String>,
     pub pid: i32,
+    pub window_id: i64,
     pub label: String,
 }
 

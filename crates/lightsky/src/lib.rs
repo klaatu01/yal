@@ -14,19 +14,23 @@ use core_foundation::{
 use core_graphics::window::CGWindowListCopyWindowInfo;
 use lightsky_sys::{SLSConnectionID, SkylightSymbols};
 
-use std::{ffi::c_void, ptr};
+use std::{collections::HashMap, ffi::c_void, ptr};
 
+/* ----------------------------- SkyLight heuristics ---------------------------- */
 // Private SkyLight heuristics (observed; may vary by macOS)
-const TAG_ON_ACTIVE_SPACE: u64 = 0x1;
-const TAG_VISIBLE_ON_ALL_SPACES_AND_ELIGIBLE: u64 = 0x2;
 const TAG_HAS_TITLEBAR_LIKE: u64 = 0x0400_0000_0000_0000;
 const TAG_MINIMIZED_1: u64 = 0x1000_0000_0000_0000;
 const TAG_MINIMIZED_2: u64 = 0x0300_0000_0000_0000;
-const TAG_ELIGIBLE_BIT: u64 = 0x8000_0000;
 
-// ---------- Public types ----------
+/* -------------------------------- Public types -------------------------------- */
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SpaceId(pub u64);
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DisplayId(pub String);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct WindowId(pub i64);
 
 impl std::fmt::Display for SpaceId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -45,18 +49,14 @@ pub enum SpaceType {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DisplaySpaces {
     /// e.g. "Display-1" / a UUID-like string (varies by macOS)
-    pub display_identifier: Option<String>,
-    pub current: Option<SpaceId>,
+    pub display_identifier: DisplayId,
+    pub current: SpaceId,
     pub spaces: Vec<SpaceRecord>,
 }
 
 impl std::fmt::Display for DisplaySpaces {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if let Some(id) = &self.display_identifier {
-            write!(f, "Display: {}", id)
-        } else {
-            write!(f, "Display: <unknown>")
-        }
+        write!(f, "Display: {}", self.display_identifier.0)
     }
 }
 
@@ -68,7 +68,8 @@ pub struct SpaceRecord {
 }
 
 bitflags! {
-    /// Private API bits; vary by macOS.
+    /// Private API bits passed to SLS window copy routines; vary by macOS.
+    #[derive(Default, Clone, Copy, PartialEq, Eq, Hash)]
     pub struct WindowListOptions: u32 {
         /// “Visible-ish” windows (typical)
         const VISIBLE = 0x2;
@@ -77,13 +78,37 @@ bitflags! {
     }
 }
 
+/* ------------------------------ Kind filtering -------------------------------- */
+
+bitflags! {
+    /// Filter which kinds of windows you want back.
+    /// You can OR these together, e.g. `APP | UTILITY`.
+    #[derive(Default, Clone, Copy, PartialEq, Eq, Hash)]
+    pub struct WindowKindFilter: u32 {
+        /// Standard application windows (top-level, normal-ish).
+        const APP        = 0b0000_0001;
+        /// Floating/utility/panel-like.
+        const UTILITY    = 0b0000_0010;
+        /// Fullscreen style windows.
+        const FULLSCREEN = 0b0000_0100;
+        /// Minimized windows (as inferred from tags).
+        const MINIMIZED  = 0b0000_1000;
+        /// Anything that doesn’t match other buckets.
+        const OTHER      = 0b0001_0000;
+
+        /// Convenience: include everything.
+        const ALL        = u32::MAX;
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WindowInfo {
-    pub window_id: u32,
+    pub window_id: i64,
     pub parent_window_id: u32,
     pub level: i32,
     pub tags: u64,
     pub attributes: u64,
+    pub space_id: SpaceId,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -94,7 +119,15 @@ pub struct Window {
     pub title: Option<String>,
 }
 
-// ---------- Wrapper ----------
+/// Grouping helper for the "all spaces" sweep.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PerSpaceWindows {
+    pub display_identifier: DisplayId,
+    pub space: SpaceRecord,
+    pub windows: Vec<WindowInfo>,
+}
+
+/* ---------------------------------- Wrapper ---------------------------------- */
 pub struct Lightsky {
     syms: SkylightSymbols,
     conn: SLSConnectionID,
@@ -108,114 +141,18 @@ impl Lightsky {
         Ok(Self { syms, conn })
     }
 
-    pub fn windows_in_spaces_app_only_with_titles(
-        &self,
-        spaces: &[SpaceId],
-        options: WindowListOptions,
-    ) -> Result<Vec<Window>> {
-        let wins = self.windows_in_spaces_app_only(spaces, options)?;
-        let cg = build_cg_index();
+    /* ----------------------------- Space management ---------------------------- */
 
-        let mut out = Vec::with_capacity(wins.len());
-        for info in wins {
-            let pid_owner_title = cg.get(&info.window_id).cloned();
-            let (pid, owner_name, title) = pid_owner_title.unwrap_or((None, None, None));
-            out.push(Window {
-                info,
-                pid,
-                owner_name,
-                title,
-            });
-        }
-        Ok(out)
-    }
-
-    /// Query windows for the given Space IDs.
-    /// Note: title/pid/etc. come from AX/CG; this returns WindowServer facts (ids, tags, levels).
-    pub fn windows_in_spaces(
-        &self,
-        spaces: &[SpaceId],
-        options: WindowListOptions,
-    ) -> Result<Vec<WindowInfo>> {
+    pub fn current_space(&self) -> Option<SpaceId> {
         unsafe {
-            // Build CFArray<CFNumber(SInt64)>
-            let nums: Vec<CFNumber> = spaces.iter().map(|s| CFNumber::from(s.0 as i64)).collect();
-            let mut raw: Vec<*const c_void> = nums
-                .iter()
-                .map(|n| n.as_concrete_TypeRef() as *const c_void)
-                .collect();
-
-            let cf_spaces = CFArrayCreate(
-                ptr::null(),
-                raw.as_mut_ptr(),
-                raw.len() as isize,
-                &kCFTypeArrayCallBacks,
-            );
-
-            let mut set_tags: u64 = 0;
-            let mut clear_tags: u64 = 0;
-
-            let list = (self.syms.SLSCopyWindowsWithOptionsAndTags)(
-                self.conn,
-                0, // cid filter: 0 = all clients
-                cf_spaces,
-                options.bits(),
-                &mut set_tags,
-                &mut clear_tags,
-            );
-            CFRelease(cf_spaces as CFTypeRef);
-
-            if list.is_null() {
-                return Ok(vec![]);
+            if let Some(copy_active) = self.syms.SLSCopyActiveSpace {
+                let sid = copy_active(self.conn);
+                if sid != 0 {
+                    return Some(SpaceId(sid));
+                }
             }
-
-            let count = CFArrayGetCount(list) as i32;
-            let query = (self.syms.SLSWindowQueryWindows)(self.conn, list, count);
-            if query.is_null() {
-                CFRelease(list as CFTypeRef);
-                return Err(anyhow!("SLSWindowQueryWindows returned null"));
-            }
-            let iter = (self.syms.SLSWindowQueryResultCopyWindows)(query);
-            if iter.is_null() {
-                CFRelease(query);
-                CFRelease(list as CFTypeRef);
-                return Err(anyhow!("SLSWindowQueryResultCopyWindows returned null"));
-            }
-
-            let mut out = Vec::new();
-            while (self.syms.SLSWindowIteratorAdvance)(iter) {
-                let wid = (self.syms.SLSWindowIteratorGetWindowID)(iter);
-                let par = (self.syms.SLSWindowIteratorGetParentID)(iter);
-                let lvl = (self.syms.SLSWindowIteratorGetLevel)(iter);
-                let tag = (self.syms.SLSWindowIteratorGetTags)(iter);
-                let att = (self.syms.SLSWindowIteratorGetAttributes)(iter);
-                out.push(WindowInfo {
-                    window_id: wid,
-                    parent_window_id: par,
-                    level: lvl,
-                    tags: tag,
-                    attributes: att,
-                });
-            }
-
-            CFRelease(iter);
-            CFRelease(query);
-            CFRelease(list as CFTypeRef);
-
-            Ok(out)
+            None
         }
-    }
-
-    pub fn windows_in_spaces_app_only(
-        &self,
-        spaces: &[SpaceId],
-        options: WindowListOptions,
-    ) -> Result<Vec<WindowInfo>> {
-        let all = self.windows_in_spaces(spaces, options)?;
-        Ok(all
-            .into_iter()
-            .filter(|w| self.is_application_window(w))
-            .collect())
     }
 
     /// Get the type of a Space (user/system/fullscreen).
@@ -240,52 +177,6 @@ impl Lightsky {
             let cf = CFString::wrap_under_create_rule(s);
             Some(cf.to_string())
         }
-    }
-
-    #[inline]
-    fn is_application_window(&self, w: &WindowInfo) -> bool {
-        // 1) Only top-level windows
-        if w.parent_window_id != 0 {
-            return false;
-        }
-
-        // 2) Accept common “app window” levels.
-        //    (Normal = 0, floating/utility often = 3, some fullscreen cases = 8)
-        match w.level {
-            0 | 3 | 8 => {}
-            _ => return false,
-        }
-
-        let tags = w.tags;
-        let attrs = w.attributes;
-
-        // 3) Must be in an active/eligible state for the Space we asked about
-        let on_space_or_globally_visible = (tags & TAG_ON_ACTIVE_SPACE) != 0
-            || ((tags & TAG_VISIBLE_ON_ALL_SPACES_AND_ELIGIBLE) != 0
-                && (tags & TAG_ELIGIBLE_BIT) != 0);
-
-        if !on_space_or_globally_visible {
-            return false;
-        }
-
-        // 4) “Looks like” a standard app window:
-        //    Either attributes say “standardish” OR a high-bit tag we often see on normal windows.
-        let standardish = (attrs & 0x2) != 0 || (tags & TAG_HAS_TITLEBAR_LIKE) != 0;
-
-        if standardish {
-            return true;
-        }
-
-        // 5) Secondary pattern seen for minimized/alt states (optional, keeps e.g. minimized app windows
-        //    if your `options` allowed them). If you *don’t* want minimized ones, comment this out.
-        if (attrs == 0 || attrs == 1)
-            && ((tags & TAG_MINIMIZED_1) != 0 || (tags & TAG_MINIMIZED_2) != 0)
-            && on_space_or_globally_visible
-        {
-            return true;
-        }
-
-        false
     }
 
     /// Discover all Spaces grouped by display via CGSCopyManagedDisplaySpaces.
@@ -395,8 +286,11 @@ impl Lightsky {
                 }
 
                 out.push(DisplaySpaces {
-                    display_identifier,
-                    current: current_space_id,
+                    display_identifier: display_identifier
+                        .map(DisplayId)
+                        .expect("at least one display should have an ID"),
+                    current: current_space_id
+                        .expect("at least one display should have a current space"),
                     spaces: spaces_vec,
                 });
             }
@@ -407,11 +301,198 @@ impl Lightsky {
             Ok(out)
         }
     }
+
+    /* ------------------------- Window queries (modular) ------------------------ */
+
+    /// Core worker: query windows **in a single Space**.
+    /// Populates `space_id` on each `WindowInfo` and filters by `kinds`.
+    pub fn get_windows_in_space(
+        &self,
+        space: SpaceId,
+        options: WindowListOptions,
+        kinds: WindowKindFilter,
+    ) -> Result<Vec<WindowInfo>> {
+        unsafe {
+            // Build CFArray<CFNumber(SInt64)> with ONE entry (this space)
+            let num = CFNumber::from(space.0 as i64);
+            let mut raw: [*const c_void; 1] = [num.as_concrete_TypeRef() as *const c_void];
+
+            let cf_spaces = CFArrayCreate(
+                ptr::null(),
+                raw.as_mut_ptr(),
+                1isize,
+                &kCFTypeArrayCallBacks,
+            );
+
+            let mut set_tags: u64 = 0;
+            let mut clear_tags: u64 = 0;
+
+            let list = (self.syms.SLSCopyWindowsWithOptionsAndTags)(
+                self.conn,
+                0, // cid filter: 0 = all clients
+                cf_spaces,
+                options.bits(),
+                &mut set_tags,
+                &mut clear_tags,
+            );
+            CFRelease(cf_spaces as CFTypeRef);
+
+            if list.is_null() {
+                return Ok(vec![]);
+            }
+
+            let count = CFArrayGetCount(list) as i32;
+            let query = (self.syms.SLSWindowQueryWindows)(self.conn, list, count);
+            if query.is_null() {
+                CFRelease(list as CFTypeRef);
+                return Err(anyhow!("SLSWindowQueryWindows returned null"));
+            }
+            let iter = (self.syms.SLSWindowQueryResultCopyWindows)(query);
+            if iter.is_null() {
+                CFRelease(query);
+                CFRelease(list as CFTypeRef);
+                return Err(anyhow!("SLSWindowQueryResultCopyWindows returned null"));
+            }
+
+            // Empty filter means "ALL"
+            let kinds = if kinds.is_empty() {
+                WindowKindFilter::ALL
+            } else {
+                kinds
+            };
+
+            let mut out = Vec::new();
+            while (self.syms.SLSWindowIteratorAdvance)(iter) {
+                let wid = (self.syms.SLSWindowIteratorGetWindowID)(iter);
+                let par = (self.syms.SLSWindowIteratorGetParentID)(iter);
+                let lvl = (self.syms.SLSWindowIteratorGetLevel)(iter);
+                let tag = (self.syms.SLSWindowIteratorGetTags)(iter);
+                let att = (self.syms.SLSWindowIteratorGetAttributes)(iter);
+
+                let info = WindowInfo {
+                    window_id: wid as i64,
+                    parent_window_id: par,
+                    level: lvl,
+                    tags: tag,
+                    attributes: att,
+                    space_id: space,
+                };
+
+                // New: mask-based classification. A window can belong to multiple buckets.
+                let mask = classify_window_mask(&info);
+                if !(mask & kinds).is_empty() {
+                    out.push(info);
+                }
+            }
+
+            CFRelease(iter);
+            CFRelease(query);
+            CFRelease(list as CFTypeRef);
+
+            Ok(out)
+        }
+    }
+
+    /// Filter + annotate with PID/owner/title (single space).
+    pub fn get_windows_in_space_with_titles(
+        &self,
+        space: SpaceId,
+        options: WindowListOptions,
+        kinds: WindowKindFilter,
+    ) -> Result<Vec<Window>> {
+        let wins = self.get_windows_in_space(space, options, kinds)?;
+        let cg = build_cg_index();
+
+        let mut out = Vec::with_capacity(wins.len());
+        for info in wins {
+            let pid_owner_title = cg.get(&(info.window_id as u32)).cloned();
+            let (pid, owner_name, title) = pid_owner_title.unwrap_or((None, None, None));
+            out.push(Window {
+                info,
+                pid,
+                owner_name,
+                title,
+            });
+        }
+        Ok(out)
+    }
+
+    /// Sweep **all spaces**: calls `list_all_spaces()` first, then queries each space,
+    /// applying the same `options` and `kinds` to each. Returns windows grouped by space.
+    pub fn get_windows_in_spaces(
+        &self,
+        options: WindowListOptions,
+        kinds: WindowKindFilter,
+    ) -> Result<Vec<PerSpaceWindows>> {
+        let displays = self.list_all_spaces()?;
+        let mut out = Vec::new();
+
+        for disp in displays.iter() {
+            let disp_id = disp.display_identifier.clone();
+            for space_rec in disp.spaces.iter().cloned() {
+                let windows = self.get_windows_in_space(space_rec.id, options, kinds)?;
+                out.push(PerSpaceWindows {
+                    display_identifier: disp_id.clone(),
+                    space: space_rec,
+                    windows,
+                });
+            }
+        }
+
+        Ok(out)
+    }
 }
 
-fn build_cg_index() -> std::collections::HashMap<u32, (Option<i32>, Option<String>, Option<String>)>
-{
-    use std::collections::HashMap;
+/* --------------------------- Window classification -------------------------- */
+
+/// Return a bitmask of all kinds this window plausibly belongs to.
+/// Notes:
+/// - Do **not** require TAG_ON_ACTIVE_SPACE or "eligible" – membership is enforced by the SLS query.
+/// - Off-current-space windows can look “minimized” in tag space on some OS builds.
+///   We therefore *add* MINIMIZED when those bits are set, but still also classify as APP/UTILITY
+///   based on level/parent/titlebar heuristics so APP-only filters still find them.
+fn classify_window_mask(w: &WindowInfo) -> WindowKindFilter {
+    let mut mask = WindowKindFilter::empty();
+
+    let tags = w.tags;
+    let attrs = w.attributes;
+
+    // Minimized?
+    if (tags & TAG_MINIMIZED_1) != 0 || (tags & TAG_MINIMIZED_2) != 0 {
+        mask |= WindowKindFilter::MINIMIZED;
+    }
+
+    let top_level = w.parent_window_id == 0;
+    let standardish = (attrs & 0x2) != 0 || (tags & TAG_HAS_TITLEBAR_LIKE) != 0;
+
+    if top_level {
+        if w.level >= 8 {
+            // Fullscreen-style layers
+            mask |= WindowKindFilter::FULLSCREEN;
+        } else if w.level == 3 {
+            // Utility/panel
+            mask |= WindowKindFilter::UTILITY;
+        } else if w.level == 0 && standardish {
+            // Normal app windows only if they look "standard"
+            mask |= WindowKindFilter::APP;
+        } else {
+            mask |= WindowKindFilter::OTHER;
+        }
+    } else {
+        mask |= WindowKindFilter::OTHER;
+    }
+
+    if mask.is_empty() {
+        mask |= WindowKindFilter::OTHER;
+    }
+    mask
+}
+
+/* ------------------------------ CG helpers (CGS) ------------------------------ */
+
+type CGIndexMap = HashMap<u32, (Option<i32>, Option<String>, Option<String>)>;
+
+fn build_cg_index() -> CGIndexMap {
     let mut map = HashMap::new();
 
     unsafe {

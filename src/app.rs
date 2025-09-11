@@ -144,6 +144,12 @@ pub fn App() -> impl IntoView {
         filter_memoized_commands(&list, &q, selected.get(), &set_selected, filter)
     });
 
+    let prefix_text = Memo::new(move |_| match filter.get() {
+        Some(CommandKind::App) => "open".to_string(),
+        Some(CommandKind::Switch) => "switch".to_string(),
+        None => String::new(),
+    });
+
     let open_selected = move || {
         if let Some(cmd) = filtered.get().get(selected.get()).cloned() {
             spawn_local(async move {
@@ -226,38 +232,39 @@ pub fn App() -> impl IntoView {
     let on_input = move |ev| set_query.set(event_target_value(&ev));
 
     view! {
-        // Top "bar" like dmenu
-        <div id="bar">
-            <input
-              id="search"
-              prop:value=move || query.get()
-              on:input=on_input
-              on:keydown=on_key
-              prop:spellcheck=false
-              prop:autocorrect="off"
-              prop:autocapitalize="off"
-              autofocus
-            />
-        </div>
+      <div id="bar">
+        <Show when=move || !prefix_text.get().is_empty()>
+          <span class="input-prefix">
+            { move || format!("{} ", prefix_text.get()) }
+          </span>
+        </Show>
 
-        <ul class="results">
-            { move || {
-                let sel = selected.get();
-                filtered.get().into_iter().enumerate().map(|(i, cmd)| {
-                    let is_sel = i == sel;
-                    view! {
-                        <li class:is-selected=is_sel>
-                            {
-                                if filter.get().is_none() {
-                                    cmd.to_string()
-                                } else {
-                                    cmd.name().to_string()
-                                }
-                                .to_lowercase() }
-                        </li>
-                    }
-                }).collect_view()
-            }}
-        </ul>
+        <input
+          id="search"
+          prop:value=move || query.get()
+          on:input=on_input
+          on:keydown=on_key
+          prop:spellcheck=false
+          prop:autocorrect="off"
+          prop:autocapitalize="off"
+          autofocus
+        />
+      </div>
+
+      <ul class="results">
+        { move || {
+          let sel = selected.get();
+          filtered.get().into_iter().enumerate().map(|(i, cmd)| {
+            let is_sel = i == sel;
+            view! {
+              <li class:is-selected=is_sel>
+                {
+                  if filter.get().is_none() { cmd.to_string() } else { cmd.name().to_string() }.to_lowercase()
+                }
+              </li>
+            }
+          }).collect_view()
+        }}
+      </ul>
     }
 }
