@@ -77,7 +77,7 @@ fn fuzzy_filter_commands(cmds: &[Command], query: &str) -> Vec<Command> {
         .iter()
         .filter_map(|cmd| {
             matcher
-                .fuzzy_match(cmd.name(), query)
+                .fuzzy_match(&cmd.name(), query)
                 .map(|score| (cmd.clone(), score))
         })
         .collect();

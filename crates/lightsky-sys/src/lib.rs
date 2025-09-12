@@ -42,6 +42,29 @@ pub struct SkylightSymbols {
     pub SLSSpaceGetType: unsafe extern "C" fn(conn: SLSConnectionID, sid: u64) -> i32,
     pub SLSCopyActiveSpace: Option<unsafe extern "C" fn(SLSConnectionID) -> u64>,
     pub CGSCopyManagedDisplaySpaces: Option<unsafe extern "C" fn(SLSConnectionID) -> CFTypeRef>,
+    pub CGSAddWindowsToSpaces:
+        unsafe extern "C" fn(conn: SLSConnectionID, windows: CFArrayRef, spaces: CFArrayRef),
+    pub CGSRemoveWindowsFromSpaces:
+        unsafe extern "C" fn(conn: SLSConnectionID, windows: CFArrayRef, spaces: CFArrayRef),
+
+    // Optional (not present on some builds): ask SkyLight which spaces a window lives in
+    pub SLSCopySpacesForWindows: Option<
+        unsafe extern "C" fn(conn: SLSConnectionID, windows: CFArrayRef, count: i32) -> CFTypeRef,
+    >,
+    pub SLSSpaceAddWindowsAndRemoveFromSpaces: Option<
+        unsafe extern "C" fn(
+            conn: SLSConnectionID,
+            windows: CFArrayRef,
+            add_to: CFArrayRef,
+            remove_from: CFArrayRef,
+        ),
+    >,
+    pub SLSMoveWindowsToManagedSpace:
+        Option<unsafe extern "C" fn(conn: SLSConnectionID, windows: CFArrayRef, space: u64)>,
+    pub SLSShowSpaces: Option<unsafe extern "C" fn(conn: SLSConnectionID, spaces: CFArrayRef)>,
+    pub SLSManagedDisplaySetCurrentSpace:
+        unsafe extern "C" fn(conn: SLSConnectionID, display: CFStringRef, space: u64) -> i32,
+    pub SLSHideSpaces: Option<unsafe extern "C" fn(conn: SLSConnectionID, spaces: CFArrayRef)>,
 }
 
 impl SkylightSymbols {
@@ -147,6 +170,48 @@ impl SkylightSymbols {
                 "CGSCopyManagedDisplaySpaces"
             );
 
+            let CGSAddWindowsToSpaces = req!(
+                sky,
+                unsafe extern "C" fn(SLSConnectionID, CFArrayRef, CFArrayRef),
+                "CGSAddWindowsToSpaces"
+            );
+            let CGSRemoveWindowsFromSpaces = req!(
+                sky,
+                unsafe extern "C" fn(SLSConnectionID, CFArrayRef, CFArrayRef),
+                "CGSRemoveWindowsFromSpaces"
+            );
+
+            let SLSCopySpacesForWindows = opt!(
+                sky,
+                unsafe extern "C" fn(SLSConnectionID, CFArrayRef, i32) -> CFTypeRef,
+                "SLSCopySpacesForWindows"
+            );
+            let SLSSpaceAddWindowsAndRemoveFromSpaces = opt!(
+                sky,
+                unsafe extern "C" fn(SLSConnectionID, CFArrayRef, CFArrayRef, CFArrayRef),
+                "SLSSpaceAddWindowsAndRemoveFromSpaces"
+            );
+            let SLSMoveWindowsToManagedSpace = opt!(
+                sky,
+                unsafe extern "C" fn(SLSConnectionID, CFArrayRef, u64),
+                "SLSMoveWindowsToManagedSpace"
+            );
+            let SLSShowSpaces = opt!(
+                sky,
+                unsafe extern "C" fn(SLSConnectionID, CFArrayRef),
+                "SLSShowSpaces"
+            );
+            let SLSManagedDisplaySetCurrentSpace = req!(
+                sky,
+                unsafe extern "C" fn(SLSConnectionID, CFStringRef, u64) -> i32,
+                "SLSManagedDisplaySetCurrentSpace"
+            );
+            let SLSHideSpaces = opt!(
+                sky,
+                unsafe extern "C" fn(SLSConnectionID, CFArrayRef),
+                "SLSHideSpaces"
+            );
+
             Ok(Self {
                 _sky: sky,
 
@@ -164,6 +229,14 @@ impl SkylightSymbols {
                 SLSSpaceGetType,
                 SLSCopyActiveSpace,
                 CGSCopyManagedDisplaySpaces,
+                CGSAddWindowsToSpaces,
+                CGSRemoveWindowsFromSpaces,
+                SLSCopySpacesForWindows,
+                SLSSpaceAddWindowsAndRemoveFromSpaces,
+                SLSMoveWindowsToManagedSpace,
+                SLSShowSpaces,
+                SLSHideSpaces,
+                SLSManagedDisplaySetCurrentSpace,
             })
         }
     }

@@ -1,12 +1,10 @@
 use tauri::{ActivationPolicy, Emitter, Manager, WindowEvent};
 
+mod ax;
 mod cmd;
 mod config;
 
-use crate::cmd::{
-    hide::{hide, remember_current_frontmost, FocusState, HideBehavior},
-    run_cmd,
-};
+use crate::{ax::AX, cmd::run_cmd};
 
 use objc2::runtime::AnyObject;
 use objc2_app_kit::{
@@ -59,7 +57,7 @@ fn apply_window_size(app: &tauri::AppHandle, cfg: &AppConfig) {
 }
 
 fn publish_cmd_list(app: &tauri::AppHandle) {
-    let cmds: Vec<_> = cmd::get_cmds();
+    let cmds: Vec<_> = cmd::get_cmds(app);
     let _ = app.emit("commands://updated", cmds);
 }
 
@@ -70,7 +68,7 @@ fn reveal_palette(app: &tauri::AppHandle) {
 }
 
 fn hide_palette_window(app: &tauri::AppHandle) {
-    hide(app, HideBehavior::FocusPrevious);
+    // hide(app, HideBehavior::FocusPrevious);
 }
 
 #[inline]
@@ -174,7 +172,7 @@ fn position_main_window_on_mouse_display(app: &tauri::AppHandle, cfg: &AppConfig
 }
 
 fn reveal_on_active_space(app: &tauri::AppHandle) {
-    remember_current_frontmost(app);
+    // remember_current_frontmost(app);
     position_main_window_on_mouse_display(app, &current_cfg_or_default(app));
 
     if let Some(win) = app.get_webview_window("main") {
@@ -306,10 +304,7 @@ pub fn run() {
             apply_window_size(app.handle(), &cfg);
             app.manage(Arc::new(RwLock::new(cfg)));
             app.set_activation_policy(ActivationPolicy::Accessory);
-            app.manage(RwLock::new(FocusState {
-                prev_pid: None,
-                window_id: None,
-            }));
+            app.manage(Arc::new(RwLock::new(AX::new())));
 
             let cfg_state = app.state::<Arc<RwLock<AppConfig>>>().inner().clone();
             spawn_config_watcher(&app.handle().clone(), cfg_state);

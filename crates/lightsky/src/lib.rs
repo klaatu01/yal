@@ -13,6 +13,7 @@ use core_foundation::{
 };
 use core_graphics::window::CGWindowListCopyWindowInfo;
 use lightsky_sys::{SLSConnectionID, SkylightSymbols};
+use serde::{Deserialize, Serialize};
 
 use std::{collections::HashMap, ffi::c_void, ptr};
 
@@ -23,14 +24,26 @@ const TAG_MINIMIZED_1: u64 = 0x1000_0000_0000_0000;
 const TAG_MINIMIZED_2: u64 = 0x0300_0000_0000_0000;
 
 /* -------------------------------- Public types -------------------------------- */
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct SpaceId(pub u64);
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Hash)]
 pub struct DisplayId(pub String);
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct WindowId(pub i64);
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct WindowId(pub u32);
+
+impl std::fmt::Display for WindowId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl std::fmt::Display for DisplayId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
 
 impl std::fmt::Display for SpaceId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -103,7 +116,7 @@ bitflags! {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WindowInfo {
-    pub window_id: i64,
+    pub window_id: WindowId,
     pub parent_window_id: u32,
     pub level: i32,
     pub tags: u64,
@@ -370,7 +383,7 @@ impl Lightsky {
                 let att = (self.syms.SLSWindowIteratorGetAttributes)(iter);
 
                 let info = WindowInfo {
-                    window_id: wid as i64,
+                    window_id: WindowId(wid),
                     parent_window_id: par,
                     level: lvl,
                     tags: tag,
@@ -393,6 +406,182 @@ impl Lightsky {
         }
     }
 
+    /// Best-effort: which Space IDs currently contain this window.
+    /// Uses SLSCopySpacesForWindows if available; otherwise returns empty (unknown).
+    pub fn spaces_for_window(&self, wid: WindowId) -> Result<Vec<SpaceId>> {
+        unsafe {
+            let Some(copy_spaces_for_windows) = self.syms.SLSCopySpacesForWindows else {
+                return Ok(Vec::new());
+            };
+
+            // Build CFArray<CFNumber> of a single window id (as SInt64)
+            let num = CFNumber::from(wid.0 as i32);
+            let mut raw: [*const c_void; 1] = [num.as_concrete_TypeRef() as *const c_void];
+            let cf_wins = CFArrayCreate(
+                ptr::null(),
+                raw.as_mut_ptr(),
+                1isize,
+                &kCFTypeArrayCallBacks,
+            );
+
+            let cf = copy_spaces_for_windows(self.conn, cf_wins, 1);
+            CFRelease(cf_wins as CFTypeRef);
+
+            if cf.is_null() {
+                return Ok(Vec::new());
+            }
+
+            // Result is CFArray of CFNumber(id64)
+            let arr = cf as CFArrayRef;
+            let count = CFArrayGetCount(arr);
+            let mut out = Vec::with_capacity(count as usize);
+            for i in 0..count {
+                let v = CFArrayGetValueAtIndex(arr, i) as CFTypeRef;
+                if !v.is_null() {
+                    let n = v as CFNumberRef;
+                    let mut id64: i64 = 0;
+                    let ok = CFNumberGetValue(
+                        n,
+                        kCFNumberSInt64Type,
+                        &mut id64 as *mut i64 as *mut c_void,
+                    );
+                    if ok {
+                        out.push(SpaceId(id64 as u64));
+                    }
+                }
+            }
+            CFRelease(cf);
+            Ok(out)
+        }
+    }
+
+    /// Move a specific window to a target Space.
+    ///
+    /// If `from` is `Some(space)`, we remove from that space only.
+    /// If `from` is `None`, we attempt to discover all existing spaces for the window
+    /// and remove it from all of them except `to`.
+    pub fn move_window_to_space(&self, window: WindowId, from: SpaceId, to: SpaceId) -> Result<()> {
+        unsafe {
+            // CFArray[window_id as SInt32]
+            let wid32: i32 = window.0 as i32;
+            let win_num = CFNumber::from(wid32); // SInt32
+            let mut wraw: [*const c_void; 1] = [win_num.as_concrete_TypeRef() as *const c_void];
+            let cf_windows: CFArrayRef = CFArrayCreate(
+                ptr::null(),
+                wraw.as_mut_ptr(),
+                1isize,
+                &kCFTypeArrayCallBacks,
+            );
+
+            // CFArray[to as SInt64]  (spaces are 64-bit ids)
+            let to_num = CFNumber::from(to.0 as i64);
+            let mut sraw_to: [*const c_void; 1] = [to_num.as_concrete_TypeRef() as *const c_void];
+            let cf_space_to: CFArrayRef = CFArrayCreate(
+                ptr::null(),
+                sraw_to.as_mut_ptr(),
+                1isize,
+                &kCFTypeArrayCallBacks,
+            );
+
+            let from_num = CFNumber::from(from.0 as i64);
+            let mut sraw_from: [*const c_void; 1] =
+                [from_num.as_concrete_TypeRef() as *const c_void];
+            let cf_space_from: CFArrayRef = CFArrayCreate(
+                ptr::null(),
+                sraw_from.as_mut_ptr(),
+                1isize,
+                &kCFTypeArrayCallBacks,
+            );
+
+            // 1) Preferred atomic API if present
+            if let Some(f) = self.syms.SLSSpaceAddWindowsAndRemoveFromSpaces {
+                log::info!("Using SLSSpaceAddWindowsAndRemoveFromSpaces");
+                f(
+                    self.conn,
+                    cf_windows,
+                    cf_space_to,
+                    if from != to {
+                        cf_space_from
+                    } else {
+                        ptr::null() as CFArrayRef
+                    },
+                );
+            }
+
+            // Optional nudge (some apps surface this in older macOS)
+            if let Some(show_spaces) = self.syms.SLSShowSpaces {
+                log::info!("Nudging with SLSShowSpaces");
+                show_spaces(self.conn, cf_space_to);
+            }
+
+            CFRelease(cf_space_from as CFTypeRef);
+            CFRelease(cf_space_to as CFTypeRef);
+            CFRelease(cf_windows as CFTypeRef);
+        }
+
+        // Verify – if we can read memberships, ensure the window is now on `to`
+        let now = self.spaces_for_window(window).unwrap_or_default();
+        if !now.contains(&to) {
+            return Err(anyhow!(
+                "move_window_to_space: window {} still not on Space {} (now in {:?})",
+                window.0,
+                to.0,
+                now
+            ));
+        }
+        Ok(())
+    }
+
+    pub fn change_space_focus(&self, display: String, space: SpaceId, to: SpaceId) -> Result<()> {
+        // show the target space first
+
+        unsafe {
+            let show = CFArrayCreate(
+                ptr::null(),
+                [CFNumber::from(to.0 as i64).as_concrete_TypeRef() as *const c_void].as_mut_ptr(),
+                1isize,
+                &kCFTypeArrayCallBacks,
+            );
+
+            let hide = CFArrayCreate(
+                ptr::null(),
+                [CFNumber::from(space.0 as i64).as_concrete_TypeRef() as *const c_void]
+                    .as_mut_ptr(),
+                1isize,
+                &kCFTypeArrayCallBacks,
+            );
+
+            // if let Some(show_spaces) = self.syms.SLSShowSpaces {
+            //     log::info!("Showing target space {}", to.0);
+            //     show_spaces(self.conn, show);
+            // }
+
+            // if let Some(hide_spaces) = self.syms.SLSHideSpaces {
+            //     log::info!("Hiding old space {}", space.0);
+            //     hide_spaces(self.conn, hide);
+            // }
+
+            log::info!("Setting display {} current space to {}", display, space.0);
+
+            let disp_cf = CFString::new(&display);
+            let res = (self.syms.SLSManagedDisplaySetCurrentSpace)(
+                self.conn,
+                disp_cf.as_concrete_TypeRef(),
+                to.0,
+            );
+            if res != 0 {
+                return Err(anyhow!(
+                    "SLSManagedDisplaySetCurrentSpace failed with code {}",
+                    res
+                ));
+            }
+            CFRelease(show as _);
+            CFRelease(hide as _);
+        }
+
+        Ok(())
+    }
+
     /// Filter + annotate with PID/owner/title (single space).
     pub fn get_windows_in_space_with_titles(
         &self,
@@ -405,7 +594,7 @@ impl Lightsky {
 
         let mut out = Vec::with_capacity(wins.len());
         for info in wins {
-            let pid_owner_title = cg.get(&(info.window_id as u32)).cloned();
+            let pid_owner_title = cg.get(&(info.window_id.0)).cloned();
             let (pid, owner_name, title) = pid_owner_title.unwrap_or((None, None, None));
             out.push(Window {
                 info,

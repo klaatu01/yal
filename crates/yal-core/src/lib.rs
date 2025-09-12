@@ -47,13 +47,12 @@ pub struct AppInfo {
     pub path: String,
 }
 
-#[derive(serde::Serialize, serde::Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct WindowTarget {
     pub app_name: String,
     pub title: Option<String>,
     pub pid: i32,
-    pub window_id: i64,
-    pub label: String,
+    pub window_id: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -69,10 +68,16 @@ impl Display for Command {
 }
 
 impl Command {
-    pub fn name(&self) -> &str {
+    pub fn name(&self) -> String {
         match self {
-            Command::App(app) => &app.name,
-            Command::Switch(t) => &t.label,
+            Command::App(app) => app.name.clone(),
+            Command::Switch(t) => {
+                if let Some(title) = &t.title {
+                    format!("{} - {}", title, t.app_name)
+                } else {
+                    t.app_name.clone()
+                }
+            }
         }
     }
 

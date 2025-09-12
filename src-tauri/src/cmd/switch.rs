@@ -9,11 +9,17 @@ use core_foundation::{
 use lightsky::Lightsky;
 use objc2::rc::Retained;
 use objc2_app_kit::{NSApplicationActivationOptions, NSRunningApplication};
+use tauri::Manager;
 
-use std::ffi::c_void;
-use std::ptr;
+use std::{
+    ffi::c_void,
+    sync::{Arc, Mutex},
+};
+use std::{ptr, sync::RwLock};
 
 use yal_core::WindowTarget;
+
+use crate::ax::AX;
 
 extern "C" {
     fn CFArrayGetCount(theArray: CFArrayRef) -> CFIndex;
@@ -26,58 +32,21 @@ extern "C" {
     fn CGRequestScreenCaptureAccess() -> bool;
 }
 
-pub fn list_switch_targets() -> Vec<WindowTarget> {
+pub fn list_switch_targets(app: &tauri::AppHandle) -> Vec<WindowTarget> {
     let _ = ensure_cg_permission_prompt();
     let _ = ensure_ax_permission_prompt();
-    let sky = match Lightsky::new() {
-        Ok(sky) => sky,
-        Err(e) => {
-            log::error!("Failed to initialize Lightsky: {}", e);
-            return Vec::new();
-        }
-    };
-
-    let displays = match sky.list_all_spaces() {
-        Ok(displays) => displays,
-        Err(e) => {
-            log::error!("Failed to list spaces: {}", e);
-            return Vec::new();
-        }
-    };
-
-    let mut targets = Vec::new();
-    for display in displays {
-        println!("{}:", display);
-        for space in display.spaces {
-            println!("  Space ID: {}", space.id);
-            println!("  Windows:");
-            match sky.windows_in_spaces_app_only_with_titles(
-                &[space.id],
-                lightsky::WindowListOptions::all(),
-            ) {
-                Ok(wl) => {
-                    for w in &wl {
-                        targets.push(WindowTarget {
-                            app_name: w.owner_name.clone().unwrap_or_default(),
-                            title: w.title.clone(),
-                            pid: w.pid.unwrap(),
-                            label: if let Some(title) = &w.title {
-                                format!("{} - {}", w.owner_name.clone().unwrap_or_default(), title)
-                            } else {
-                                w.owner_name.clone().unwrap_or_default()
-                            },
-                            window_id: w.info.window_id as i64,
-                        });
-                    }
-                }
-                Err(e) => {
-                    log::error!("Failed to list windows in space {}: {}", space.id, e);
-                    continue;
-                }
-            };
-        }
-    }
-    targets
+    let ax = app.state::<Arc<RwLock<AX>>>();
+    let ax_guard = ax.read().unwrap();
+    let results = ax_guard.application_tree.flatten();
+    results
+        .into_iter()
+        .map(|w| WindowTarget {
+            pid: w.pid,
+            window_id: w.window_id.0,
+            title: w.title.clone(),
+            app_name: w.app_name.clone(),
+        })
+        .collect()
 }
 
 pub fn focus_switch_target(t: &WindowTarget) -> Result<(), String> {
