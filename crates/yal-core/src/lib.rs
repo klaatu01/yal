@@ -47,9 +47,18 @@ pub struct AppInfo {
     pub path: String,
 }
 
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct WindowTarget {
+    pub app_name: String,
+    pub title: Option<String>,
+    pub pid: i32,
+    pub window_id: u32,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum Command {
     App(AppInfo),
+    Switch(WindowTarget),
 }
 
 impl Display for Command {
@@ -59,15 +68,38 @@ impl Display for Command {
 }
 
 impl Command {
-    pub fn name(&self) -> &str {
+    pub fn name(&self) -> String {
         match self {
-            Command::App(app) => &app.name,
+            Command::App(app) => app.name.clone(),
+            Command::Switch(t) => {
+                if let Some(title) = &t.title {
+                    format!("{} - {}", t.app_name, title)
+                } else {
+                    t.app_name.clone()
+                }
+            }
         }
     }
 
     pub fn prefix(&self) -> &str {
         match self {
             Command::App(_) => "app",
+            Command::Switch(_) => "switch",
         }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum CommandKind {
+    App,
+    Switch,
+}
+
+impl CommandKind {
+    pub fn is_kind(&self, cmd: &Command) -> bool {
+        matches!(
+            (self, cmd),
+            (CommandKind::App, Command::App(_)) | (CommandKind::Switch, Command::Switch(_))
+        )
     }
 }

@@ -1,0 +1,32 @@
+[package]
+name = "lightsky"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1.0.99"
+bitflags = "2.9.4"
+core-foundation = { version = "0.10.1", features = ["mac_os_10_8_features"] }
+core-graphics = { version = "0.25.0", features = ["highsierra"] }
+lightsky-sys = { path = "../lightsky-sys" }
+log = "0.4.28"
+serde = { version = "1.0.219", features = ["derive"] }
+
+[dev-dependencies]
+env_logger = "0.11.8"
+log = "0.4.28"
+objc2 = "0.6.2"
+objc2-app-kit = "0.3.1"
+objc2-foundation = "0.3.1"
+
+[[example]]
+name = "list_windows"
+path = "examples/list_windows.rs"
+
+[[example]]
+name = "move_window"
+path = "examples/move_window.rs"
+
+[[example]]
+name = "change_space"
+path = "examples/change_space.rs"

@@ -1,0 +1,10 @@
+[package]
+name = "lightsky-sys"
+version = "0.0.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1.0.99"
+core-foundation = { version = "0.10.1", features = ["mac_os_10_8_features"] }
+libloading = "0.8.8"
+
