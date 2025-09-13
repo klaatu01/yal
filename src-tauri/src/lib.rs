@@ -68,7 +68,7 @@ fn reveal_palette(app: &tauri::AppHandle) {
 }
 
 fn hide_palette_window(app: &tauri::AppHandle) {
-    // hide(app, HideBehavior::FocusPrevious);
+    app.hide().ok();
 }
 
 #[inline]
@@ -279,6 +279,12 @@ pub fn run() {
                             if win.is_visible().unwrap_or(false) {
                                 hide_palette_window(app);
                             } else {
+                                let handle = win.app_handle();
+                                {
+                                    let _ax = handle.state::<Arc<RwLock<AX>>>();
+                                    let mut _ax = _ax.write().unwrap();
+                                    _ax.refresh();
+                                }
                                 publish_cmd_list(app);
                                 reveal_palette(app);
                             }
@@ -290,6 +296,13 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .on_window_event(|win, ev| match ev {
             WindowEvent::Focused(false) => {
+                let handle = win.app_handle();
+                let _ax = handle.state::<Arc<RwLock<AX>>>();
+                let mut _ax = _ax.write().unwrap();
+                let focused = _ax.get_focused_window();
+                if let Some(focus) = focused {
+                    _ax.focus_window(focus);
+                }
                 // On blur, hide without bringing previous app to front (mac) to avoid focus ping-pong
                 hide_palette_window(win.app_handle());
             }
@@ -304,7 +317,7 @@ pub fn run() {
             apply_window_size(app.handle(), &cfg);
             app.manage(Arc::new(RwLock::new(cfg)));
             app.set_activation_policy(ActivationPolicy::Accessory);
-            app.manage(Arc::new(RwLock::new(AX::new())));
+            app.manage(Arc::new(RwLock::new(AX::new(app.handle().clone()))));
 
             let cfg_state = app.state::<Arc<RwLock<AppConfig>>>().inner().clone();
             spawn_config_watcher(&app.handle().clone(), cfg_state);

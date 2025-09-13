@@ -44,6 +44,7 @@ pub struct DisplayNode {
 
 pub struct SpaceNode {
     pub id: SpaceId,
+    pub index: usize,
     pub windows: Vec<WindowNode>,
 }
 
@@ -58,6 +59,7 @@ pub struct WindowNode {
 pub struct SearchResult {
     pub display_id: DisplayId,
     pub space_id: SpaceId,
+    pub space_index: usize,
     pub window_id: WindowId,
     pub title: Option<String>,
     pub pid: i32,
@@ -122,6 +124,28 @@ impl ApplicationTree {
             .collect()
     }
 
+    pub fn find_display_from_space(&self, space_id: SpaceId) -> Option<DisplayId> {
+        for display in &self.displays {
+            for space in &display.spaces {
+                if space.id == space_id {
+                    return Some(display.id.clone());
+                }
+            }
+        }
+        None
+    }
+
+    pub fn find_space_index(&self, space_id: SpaceId) -> Option<usize> {
+        for display in &self.displays {
+            for space in &display.spaces {
+                if space.id == space_id {
+                    return Some(space.index);
+                }
+            }
+        }
+        None
+    }
+
     pub fn flatten(&self) -> Vec<SearchResult> {
         let mut results = Vec::new();
         for display in &self.displays {
@@ -135,6 +159,7 @@ impl ApplicationTree {
                         pid: window.pid,
                         app_name: window.app_name.clone(),
                         is_focused: window.is_focused,
+                        space_index: space.index,
                     });
                 }
             }
@@ -163,7 +188,6 @@ impl ApplicationTree {
 extern "C" {
     fn CFArrayGetCount(theArray: CFArrayRef) -> isize;
     fn CFArrayGetValueAtIndex(theArray: CFArrayRef, idx: isize) -> *const std::ffi::c_void;
-    fn CGDisplayCreateUUIDFromDisplayID(display: CGDirectDisplayID) -> CFUUIDRef;
 }
 
 /// Returns the focused window ID if available
@@ -217,13 +241,14 @@ pub fn build_application_tree(ls: &Lightsky) -> ApplicationTree {
                 window_nodes.push(WindowNode {
                     id: window.info.window_id,
                     title: window.title,
-                    pid: window.pid.expect("Window should have a pid"),
+                    pid: window.pid,
                     app_name: window.owner_name.unwrap_or_default(),
                     is_focused: Some(window.info.window_id) == focused_window_id,
                 });
             }
             space_nodes.push(SpaceNode {
                 id: space.id,
+                index: space.index,
                 windows: window_nodes,
             });
         }

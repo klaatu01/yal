@@ -40,7 +40,7 @@ pub struct SkylightSymbols {
     pub SLSCopyManagedDisplayForSpace:
         unsafe extern "C" fn(conn: SLSConnectionID, sid: u64) -> CFStringRef,
     pub SLSSpaceGetType: unsafe extern "C" fn(conn: SLSConnectionID, sid: u64) -> i32,
-    pub SLSCopyActiveSpace: Option<unsafe extern "C" fn(SLSConnectionID) -> u64>,
+    pub SLSGetActiveSpace: unsafe extern "C" fn(SLSConnectionID) -> u64,
     pub CGSCopyManagedDisplaySpaces: Option<unsafe extern "C" fn(SLSConnectionID) -> CFTypeRef>,
     pub CGSAddWindowsToSpaces:
         unsafe extern "C" fn(conn: SLSConnectionID, windows: CFArrayRef, spaces: CFArrayRef),
@@ -158,10 +158,10 @@ impl SkylightSymbols {
                 unsafe extern "C" fn(SLSConnectionID, u64) -> i32,
                 "SLSSpaceGetType"
             );
-            let SLSCopyActiveSpace = opt!(
+            let SLSGetActiveSpace = req!(
                 sky,
                 unsafe extern "C" fn(SLSConnectionID) -> u64,
-                "SLSCopyActiveSpace"
+                "SLSGetActiveSpace"
             );
 
             let CGSCopyManagedDisplaySpaces = opt!(
@@ -227,7 +227,7 @@ impl SkylightSymbols {
                 SLSWindowIteratorGetAttributes,
                 SLSCopyManagedDisplayForSpace,
                 SLSSpaceGetType,
-                SLSCopyActiveSpace,
+                SLSGetActiveSpace,
                 CGSCopyManagedDisplaySpaces,
                 CGSAddWindowsToSpaces,
                 CGSRemoveWindowsFromSpaces,

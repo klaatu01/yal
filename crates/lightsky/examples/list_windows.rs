@@ -8,7 +8,7 @@ fn main() -> anyhow::Result<()> {
     for display in displays {
         println!("{}:", display);
         for space in display.spaces {
-            println!("  Space ID: {}", space.id);
+            println!("  Space ID: {}, index: {}", space.id, space.index);
             println!("  Windows:");
             let windows = sky.get_windows_in_space_with_titles(
                 space.id,
@@ -26,6 +26,7 @@ fn main() -> anyhow::Result<()> {
                     "      Title: {}",
                     window.title.unwrap_or("<No Title>".into())
                 );
+                println!("      PID: {}", window.pid);
             }
         }
     }

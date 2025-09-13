@@ -1,14 +1,14 @@
 #![cfg(target_os = "macos")]
 
-use anyhow::{Result, anyhow};
+use anyhow::{anyhow, Result};
 use bitflags::bitflags;
 use core_foundation::{
     array::{
-        CFArrayCreate, CFArrayGetCount, CFArrayGetValueAtIndex, CFArrayRef, kCFTypeArrayCallBacks,
+        kCFTypeArrayCallBacks, CFArrayCreate, CFArrayGetCount, CFArrayGetValueAtIndex, CFArrayRef,
     },
     base::{CFRelease, CFTypeRef, TCFType},
     dictionary::{CFDictionaryGetValue, CFDictionaryRef},
-    number::{CFNumber, CFNumberGetValue, CFNumberRef, kCFNumberSInt64Type},
+    number::{kCFNumberSInt64Type, CFNumber, CFNumberGetValue, CFNumberRef},
     string::CFString,
 };
 use core_graphics::window::CGWindowListCopyWindowInfo;
@@ -76,6 +76,7 @@ impl std::fmt::Display for DisplaySpaces {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SpaceRecord {
     pub id: SpaceId,
+    pub index: usize,
     pub kind: SpaceType,
     pub is_current_on_display: bool,
 }
@@ -127,7 +128,7 @@ pub struct WindowInfo {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Window {
     pub info: WindowInfo,
-    pub pid: Option<i32>,
+    pub pid: i32,
     pub owner_name: Option<String>,
     pub title: Option<String>,
 }
@@ -156,15 +157,10 @@ impl Lightsky {
 
     /* ----------------------------- Space management ---------------------------- */
 
-    pub fn current_space(&self) -> Option<SpaceId> {
+    pub fn current_space(&self) -> SpaceId {
         unsafe {
-            if let Some(copy_active) = self.syms.SLSCopyActiveSpace {
-                let sid = copy_active(self.conn);
-                if sid != 0 {
-                    return Some(SpaceId(sid));
-                }
-            }
-            None
+            let space = (self.syms.SLSGetActiveSpace)(self.conn);
+            SpaceId(space)
         }
     }
 
@@ -231,7 +227,11 @@ impl Lightsky {
                 let ok = unsafe {
                     CFNumberGetValue(n, kCFNumberSInt64Type, &mut out as *mut i64 as *mut c_void)
                 };
-                if ok { Some(out) } else { None }
+                if ok {
+                    Some(out)
+                } else {
+                    None
+                }
             }
 
             let mut out = Vec::new();
@@ -292,6 +292,7 @@ impl Lightsky {
                             spaces_vec.push(SpaceRecord {
                                 id: sid,
                                 kind,
+                                index: j as usize,
                                 is_current_on_display: is_cur,
                             });
                         }
@@ -375,6 +376,7 @@ impl Lightsky {
             };
 
             let mut out = Vec::new();
+            let mut index: usize = 0;
             while (self.syms.SLSWindowIteratorAdvance)(iter) {
                 let wid = (self.syms.SLSWindowIteratorGetWindowID)(iter);
                 let par = (self.syms.SLSWindowIteratorGetParentID)(iter);
@@ -396,6 +398,7 @@ impl Lightsky {
                 if !(mask & kinds).is_empty() {
                     out.push(info);
                 }
+                index += 1;
             }
 
             CFRelease(iter);
@@ -532,7 +535,12 @@ impl Lightsky {
         Ok(())
     }
 
-    pub fn change_space_focus(&self, display: String, space: SpaceId, to: SpaceId) -> Result<()> {
+    pub fn change_space_focus(
+        &self,
+        display: DisplayId,
+        space: SpaceId,
+        to: SpaceId,
+    ) -> Result<()> {
         // show the target space first
 
         unsafe {
@@ -563,7 +571,7 @@ impl Lightsky {
 
             log::info!("Setting display {} current space to {}", display, space.0);
 
-            let disp_cf = CFString::new(&display);
+            let disp_cf = CFString::new(&display.0);
             let res = (self.syms.SLSManagedDisplaySetCurrentSpace)(
                 self.conn,
                 disp_cf.as_concrete_TypeRef(),
@@ -598,7 +606,7 @@ impl Lightsky {
             let (pid, owner_name, title) = pid_owner_title.unwrap_or((None, None, None));
             out.push(Window {
                 info,
-                pid,
+                pid: pid.unwrap_or(0),
                 owner_name,
                 title,
             });
@@ -733,7 +741,11 @@ fn dict_get_i64(dict: CFDictionaryRef, key: &CFString) -> Option<i64> {
         let mut out: i64 = 0;
         // Using SInt64 works for 32-bit values too; CF will convert if representable.
         let ok = CFNumberGetValue(n, kCFNumberSInt64Type, &mut out as *mut i64 as *mut c_void);
-        if ok { Some(out) } else { None }
+        if ok {
+            Some(out)
+        } else {
+            None
+        }
     }
 }
 
