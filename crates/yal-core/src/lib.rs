@@ -73,7 +73,7 @@ impl Command {
             Command::App(app) => app.name.clone(),
             Command::Switch(t) => {
                 if let Some(title) = &t.title {
-                    format!("{} - {}", title, t.app_name)
+                    format!("{} - {}", t.app_name, title)
                 } else {
                     t.app_name.clone()
                 }
