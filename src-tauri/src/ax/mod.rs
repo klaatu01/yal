@@ -24,6 +24,7 @@ extern "C" {
 /* ---------------------------- CoreFoundation FFI ---------------------------- */
 
 use std::thread;
+use std::time::Duration;
 use std::{ffi::c_void, ptr};
 
 extern "C" {
@@ -217,7 +218,52 @@ fn post_key(k: CGKeyCode, down: bool) -> bool {
     false
 }
 
-fn ctrl_combo(arrow: CGKeyCode) -> bool {
+fn press_ctrl_digit(n: usize) -> bool {
+    let key = match n {
+        1 => 18,
+        2 => 19,
+        3 => 20,
+        4 => 21,
+        5 => 23,
+        6 => 22,
+        7 => 26,
+        8 => 28,
+        9 => 25,
+        10 => 29,
+        _ => return false,
+    };
+    let Some(src) = CGEventSource::new(CGEventSourceStateID::CombinedSessionState).ok() else {
+        return false;
+    };
+
+    // Ctrl down
+    if let Some(e) = CGEvent::new_keyboard_event(src.clone(), KC_CTRL, true).ok() {
+        e.post(CGEventTapLocation::HID);
+    } else {
+        return false;
+    }
+    thread::sleep(Duration::from_millis(30));
+
+    // Digit down/up WITH ctrl flag set
+    if let Some(e) = CGEvent::new_keyboard_event(src.clone(), key, true).ok() {
+        e.set_flags(CGEventFlags::CGEventFlagControl);
+        e.post(CGEventTapLocation::HID);
+    }
+    thread::sleep(Duration::from_millis(10));
+    if let Some(e) = CGEvent::new_keyboard_event(src.clone(), key, false).ok() {
+        e.set_flags(CGEventFlags::CGEventFlagControl);
+        e.post(CGEventTapLocation::HID);
+    }
+    thread::sleep(Duration::from_millis(10));
+
+    // Ctrl up
+    if let Some(e) = CGEvent::new_keyboard_event(src, KC_CTRL, false).ok() {
+        e.post(CGEventTapLocation::HID);
+    }
+    true
+}
+
+fn ctrl_combo(key: CGKeyCode) -> bool {
     // Ctrl down
     if !post_key(KC_CTRL, true) {
         return false;
@@ -225,21 +271,13 @@ fn ctrl_combo(arrow: CGKeyCode) -> bool {
     std::thread::sleep(std::time::Duration::from_millis(2));
 
     // Arrow down + up (no flags needed because Control is physically held)
-    let _ = post_key(arrow, true);
+    let _ = post_key(key, true);
     std::thread::sleep(std::time::Duration::from_millis(16));
-    let _ = post_key(arrow, false);
+    let _ = post_key(key, false);
 
     // Ctrl up
     std::thread::sleep(std::time::Duration::from_millis(2));
     post_key(KC_CTRL, false)
-}
-
-/// Post Ctrl+<digit> (1..=10 where 10 -> '0' key) to jump directly to Desktop N on current display.
-fn press_ctrl_digit(n: usize) -> bool {
-    let Some(key) = kc_for_digit_1_to_10(n) else {
-        return false;
-    };
-    ctrl_combo(key)
 }
 
 fn press_ctrl_left() -> bool {
@@ -342,35 +380,43 @@ impl AX {
             thread::sleep(std::time::Duration::from_millis(40));
         }
 
-        // if target_space_index < 10 {
-        //     let worked = press_ctrl_digit(target_space_index + 1);
-        //     if !worked {
-        //         log::warn!("Failed to post Ctrl+{} key event", target_space_index + 1);
-        //     }
-        //     log::info!("Pressed Ctrl+{}", target_space_index);
-        //     thread::sleep(std::time::Duration::from_millis(1000));
-        //     return Some(());
-        // }
+        let current_space_index = self
+            .application_tree
+            .find_space_index(self.current_display_space.space_id)?;
+
+        if target_space_index == current_space_index {
+            log::info!("Already on target space");
+            return Some(());
+        }
+
+        if target_space_index <= 9 {
+            log::info!("Pressed Ctrl+{}", target_space_index);
+            let _ = press_ctrl_digit(target_space_index + 1); // 1-based
+            thread::sleep(std::time::Duration::from_millis(200));
+            return Some(());
+        } else {
+            // move to 9 and then right
+            let _ = press_ctrl_digit(10);
+            thread::sleep(std::time::Duration::from_millis(250));
+            let diff = (target_space_index as isize) - 9;
+
+            if diff > 0 {
+                log::info!("Moving right {} times", diff);
+                for _ in 0..diff {
+                    log::info!("Pressing Ctrl+Right");
+                    let _ = press_ctrl_right();
+                }
+            } else if diff < 0 {
+                log::info!("Moving left {} times", -diff);
+                for _ in 0..(-diff) {
+                    log::info!("Pressing Ctrl+Left");
+                    let _ = press_ctrl_left();
+                }
+            }
+        }
 
         // Fallback: approximate with left/right. We need a relative delta; best effort:
         // Attempt to compute current index on *current* (now-target) display.
-        let current_idx = self
-            .application_tree
-            .find_space_index(self.current_display_space.space_id)
-            .unwrap_or(target_space_index);
-
-        let diff = (target_space_index as isize) - (current_idx as isize);
-        if diff > 0 {
-            for _ in 0..diff {
-                log::info!("Pressing Ctrl+Right");
-                let _ = press_ctrl_right();
-            }
-        } else if diff < 0 {
-            for _ in 0..(-diff) {
-                log::info!("Pressing Ctrl+Left");
-                let _ = press_ctrl_left();
-            }
-        }
         Some(())
     }
 

@@ -1,6 +1,6 @@
 use core_foundation::array::CFArrayRef;
 use core_foundation::number::CFNumberRef;
-use core_graphics::display::{CFDictionaryRef, CGDirectDisplayID};
+use core_graphics::display::CFDictionaryRef;
 use core_graphics::window::{
     kCGNullWindowID, kCGWindowListOptionOnScreenOnly, CGWindowListCopyWindowInfo,
 };
@@ -8,7 +8,6 @@ use lightsky::{DisplayId, Lightsky, SpaceId, WindowId};
 
 use core_foundation::base::{CFTypeRef, TCFType};
 use core_foundation::string::CFString;
-use core_foundation::uuid::CFUUIDRef;
 
 pub struct ApplicationTree {
     pub displays: Vec<DisplayNode>,
