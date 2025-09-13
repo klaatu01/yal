@@ -226,7 +226,7 @@ fn ctrl_combo(arrow: CGKeyCode) -> bool {
 
     // Arrow down + up (no flags needed because Control is physically held)
     let _ = post_key(arrow, true);
-    std::thread::sleep(std::time::Duration::from_millis(2));
+    std::thread::sleep(std::time::Duration::from_millis(16));
     let _ = post_key(arrow, false);
 
     // Ctrl up
