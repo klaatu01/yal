@@ -179,6 +179,32 @@ fn active_display_id(app: &tauri::AppHandle) -> Option<DisplayId> {
 const KC_CTRL: CGKeyCode = 59; // kVK_Control
 const KC_LEFT: CGKeyCode = 123; // kVK_LeftArrow
 const KC_RIGHT: CGKeyCode = 124; // kVK_RightArrow
+const KC_1: CGKeyCode = 18;
+const KC_2: CGKeyCode = 19;
+const KC_3: CGKeyCode = 20;
+const KC_4: CGKeyCode = 21;
+const KC_5: CGKeyCode = 23;
+const KC_6: CGKeyCode = 22;
+const KC_7: CGKeyCode = 26;
+const KC_8: CGKeyCode = 28;
+const KC_9: CGKeyCode = 25;
+const KC_0: CGKeyCode = 29;
+
+fn kc_for_digit_1_to_10(n: usize) -> Option<CGKeyCode> {
+    match n {
+        1 => Some(KC_1),
+        2 => Some(KC_2),
+        3 => Some(KC_3),
+        4 => Some(KC_4),
+        5 => Some(KC_5),
+        6 => Some(KC_6),
+        7 => Some(KC_7),
+        8 => Some(KC_8),
+        9 => Some(KC_9),
+        10 => Some(KC_0),
+        _ => None,
+    }
+}
 
 fn post_key(k: CGKeyCode, down: bool) -> bool {
     let Some(src) = CGEventSource::new(CGEventSourceStateID::HIDSystemState).ok() else {
@@ -210,20 +236,10 @@ fn ctrl_combo(arrow: CGKeyCode) -> bool {
 
 /// Post Ctrl+<digit> (1..=10 where 10 -> '0' key) to jump directly to Desktop N on current display.
 fn press_ctrl_digit(n: usize) -> bool {
-    let key: Option<CGKeyCode> = match n {
-        1 => Some(18), // kVK_ANSI_1
-        2 => Some(19),
-        3 => Some(20),
-        4 => Some(21),
-        5 => Some(23),
-        6 => Some(22),
-        7 => Some(26),
-        8 => Some(28),
-        9 => Some(25),
-        10 => Some(29), // kVK_ANSI_0
-        _ => None,
+    let Some(key) = kc_for_digit_1_to_10(n) else {
+        return false;
     };
-    key.map(ctrl_combo).is_some()
+    ctrl_combo(key)
 }
 
 fn press_ctrl_left() -> bool {
@@ -326,13 +342,15 @@ impl AX {
             thread::sleep(std::time::Duration::from_millis(40));
         }
 
-        // Prefer direct jump via Ctrl+digit if within 1..=10.
-        if (1..=10).contains(&target_space_index) {
-            let _ = press_ctrl_digit(target_space_index + 1);
-            log::info!("Pressed Ctrl+{}", target_space_index);
-            thread::sleep(std::time::Duration::from_millis(1000));
-            return Some(());
-        }
+        // if target_space_index < 10 {
+        //     let worked = press_ctrl_digit(target_space_index + 1);
+        //     if !worked {
+        //         log::warn!("Failed to post Ctrl+{} key event", target_space_index + 1);
+        //     }
+        //     log::info!("Pressed Ctrl+{}", target_space_index);
+        //     thread::sleep(std::time::Duration::from_millis(1000));
+        //     return Some(());
+        // }
 
         // Fallback: approximate with left/right. We need a relative delta; best effort:
         // Attempt to compute current index on *current* (now-target) display.
@@ -346,13 +364,11 @@ impl AX {
             for _ in 0..diff {
                 log::info!("Pressing Ctrl+Right");
                 let _ = press_ctrl_right();
-                thread::sleep(std::time::Duration::from_millis(30));
             }
         } else if diff < 0 {
             for _ in 0..(-diff) {
                 log::info!("Pressing Ctrl+Left");
                 let _ = press_ctrl_left();
-                thread::sleep(std::time::Duration::from_millis(30));
             }
         }
         Some(())
