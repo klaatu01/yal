@@ -33,32 +33,6 @@ A tiny, no-nonsense app launcher. Press `⌘ Space`, type a few letters, hit `En
 
 ---
 
-## Under the hood: window detection & switching
-
-YAL gathers a snapshot of displays → spaces → windows, then focuses the one you choose.
-
-- **Space & window inventory (Skylight)**  
-  Uses private SkyLight/CGS symbols via a small Rust layer (“Lightsky”) to:
-  - list managed displays and their Spaces (`CGSCopyManagedDisplaySpaces`),
-  - enumerate windows per Space (`SLSCopyWindowsWithOptionsAndTags` + iterators),
-  - infer window type (normal/utility/fullscreen/minimized) from **level** and **tag** bits.  
-    (Heuristics include flags like `TAG_HAS_TITLEBAR_LIKE`, and “minimized‑ish” masks observed on recent macOS builds.)
-
-- **Metadata enrichment (CoreGraphics)**  
-  Separately reads the public `CGWindowListCopyWindowInfo` snapshot to attach **PID**, **owner name**, and **title** to each window ID. This is also why YAL needs **Screen Recording** permission (macOS requires it to access full window metadata).
-
-- **Space targeting**  
-  To jump across Spaces, YAL identifies the **display** that contains the target Space, warps the cursor to that display’s center (so Mission Control shortcuts address the right display), then:
-  - uses `Control + <digit>` for Desktops 1–10 when available, or  
-  - `Control + Left/Right` to walk to the desired index.
-
-- **Focusing the exact window (AX)**  
-  After switching to the Space, YAL activates the target app (`NSRunningApplication.activate…`), then uses the Accessibility API to set the **AXFocusedWindow** and perform **AXRaise** for the specific `AXWindowNumber` that matches the CGS window id.
-
-> Note: This relies on private symbols and brittle heuristics. Apple can (and does) change SkyLight internals between major macOS versions. YAL targets macOS 15+ and may need updates over time.
-
----
-
 ## Installation
 
 ### Install from Homebrew
@@ -203,6 +177,9 @@ w_radius    = 0
 
 #### Theme (from `themes.toml`)
 
+![yal-theme](https://github.com/user-attachments/assets/b26908d7-583c-4c8b-8efa-7d295356f364)
+
+
 Each **theme** is a `[name]` table with these keys:
 
 | Key              | Type   | Description                                             |
@@ -251,6 +228,32 @@ Each **theme** is a `[name]` table with these keys:
   - Ensure Mission Control shortcuts are enabled (see above).  
   - Quit and relaunch YAL after granting permissions.  
   - Some apps (or non‑standard windows) may not expose the right metadata.
+
+---
+
+## Under the hood: window detection & switching
+
+YAL gathers a snapshot of displays → spaces → windows, then focuses the one you choose.
+
+- **Space & window inventory (Skylight)**  
+  Uses private SkyLight/CGS symbols via a small Rust layer (“Lightsky”) to:
+  - list managed displays and their Spaces (`CGSCopyManagedDisplaySpaces`),
+  - enumerate windows per Space (`SLSCopyWindowsWithOptionsAndTags` + iterators),
+  - infer window type (normal/utility/fullscreen/minimized) from **level** and **tag** bits.  
+    (Heuristics include flags like `TAG_HAS_TITLEBAR_LIKE`, and “minimized‑ish” masks observed on recent macOS builds.)
+
+- **Metadata enrichment (CoreGraphics)**  
+  Separately reads the public `CGWindowListCopyWindowInfo` snapshot to attach **PID**, **owner name**, and **title** to each window ID. This is also why YAL needs **Screen Recording** permission (macOS requires it to access full window metadata).
+
+- **Space targeting**  
+  To jump across Spaces, YAL identifies the **display** that contains the target Space, warps the cursor to that display’s center (so Mission Control shortcuts address the right display), then:
+  - uses `Control + <digit>` for Desktops 1–10 when available, or  
+  - `Control + Left/Right` to walk to the desired index.
+
+- **Focusing the exact window (AX)**  
+  After switching to the Space, YAL activates the target app (`NSRunningApplication.activate…`), then uses the Accessibility API to set the **AXFocusedWindow** and perform **AXRaise** for the specific `AXWindowNumber` that matches the CGS window id.
+
+> Note: This relies on private symbols and brittle heuristics. Apple can (and does) change SkyLight internals between major macOS versions. YAL targets macOS 15+ and may need updates over time.
 
 ---
 
