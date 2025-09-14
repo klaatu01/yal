@@ -12,8 +12,9 @@ A tiny, no-nonsense app launcher. Press `⌘ Space`, type a few letters, hit `En
 
 - **Global hotkey**: toggles with `⌘ Space` (configurable in code).
 - **Fuzzy search**: type fragments like `gc` → finds “Google Chrome”.
-- **Multi-monitor aware**: opens on the active display; plays nicely with separate Spaces.
-- **Hot-reload config**: edit `config.toml` and it live-applies (colors, fonts, size).
+- **Multi‑monitor aware**: opens on the active display; plays nicely with separate Spaces.
+- **Hot‑reload config**: edit `config.toml` and it live‑applies (colors, fonts, size).
+- **Theme filtering & switching**: press `Ctrl‑T` to filter themes by name and apply instantly.
 - **Lightweight**: ~20 MB RAM, instant launch.
 - **Window switching**: list running app windows and jump to them (across Spaces).
 
@@ -28,7 +29,7 @@ A tiny, no-nonsense app launcher. Press `⌘ Space`, type a few letters, hit `En
   - `/System/Applications`
   - `~/Applications`
 - **Launching**: opens the selected `.app` bundle.
-- **Switching**: focuses an existing app/window using Accessibility APIs plus a small amount of Mission Control key-emulation (see below).
+- **Switching**: focuses an existing app/window using Accessibility APIs plus a small amount of Mission Control key‑emulation (see below).
 
 ---
 
@@ -41,14 +42,14 @@ YAL gathers a snapshot of displays → spaces → windows, then focuses the one 
   - list managed displays and their Spaces (`CGSCopyManagedDisplaySpaces`),
   - enumerate windows per Space (`SLSCopyWindowsWithOptionsAndTags` + iterators),
   - infer window type (normal/utility/fullscreen/minimized) from **level** and **tag** bits.  
-    (Heuristics include flags like `TAG_HAS_TITLEBAR_LIKE`, and “minimized-ish” masks observed on recent macOS builds.)
+    (Heuristics include flags like `TAG_HAS_TITLEBAR_LIKE`, and “minimized‑ish” masks observed on recent macOS builds.)
 
 - **Metadata enrichment (CoreGraphics)**  
   Separately reads the public `CGWindowListCopyWindowInfo` snapshot to attach **PID**, **owner name**, and **title** to each window ID. This is also why YAL needs **Screen Recording** permission (macOS requires it to access full window metadata).
 
 - **Space targeting**  
   To jump across Spaces, YAL identifies the **display** that contains the target Space, warps the cursor to that display’s center (so Mission Control shortcuts address the right display), then:
-  - uses `Control + <digit>` for Spaces 1–10 when available, or  
+  - uses `Control + <digit>` for Desktops 1–10 when available, or  
   - `Control + Left/Right` to walk to the desired index.
 
 - **Focusing the exact window (AX)**  
@@ -105,7 +106,7 @@ Tested on Apple Silicon with **macOS 15+**.
 
 YAL needs both:
 
-- **Accessibility** (to focus/raise windows)
+- **Accessibility** (to focus/raise windows and post Mission Control keys)
 - **Screen Recording** (to read window metadata via CGWindow)
 
 System Settings → **Privacy & Security** → **Accessibility** and **Screen Recording**.  
@@ -116,13 +117,13 @@ For switching to work effectively, make sure Mission Control shortcuts are turne
 **System Settings** → **Keyboard** → **Keyboard Shortcuts…** → **Mission Control** → enable:
 - **Move left a space** → `Control + Left Arrow`
 - **Move right a space** → `Control + Right Arrow`
-- **Move to space 1…10** → `Control + 1…0`
+- **Switch to Desktop 1…10** → `Control + 1…0`
 
 If you use multiple monitors, “Displays have separate Spaces” is recommended.
 
 ### Autostart
 
-Since YAL is long-running, consider adding it to **Login Items**.
+Since YAL is long‑running, consider adding it to **Login Items**.
 
 ### Disable Spotlight’s shortcut
 
@@ -137,72 +138,100 @@ Spotlight also binds `⌘ Space`. Pick one:
 
 - `⌘ Space` — toggle YAL
 - Type to search (fuzzy match)
-- `Up/Down` or `Ctrl-p` / `Ctrl-n` — navigate
+- `Up/Down` or `Ctrl‑p` / `Ctrl‑n` — navigate
 - `Enter` — launch selected app **or** switch to its window (if in switch mode)
 - `Esc` — close YAL
-- `Ctrl-o` / `Ctrl-f` — toggle between **app** and **switch** mode  
-  _(YAL remembers the last mode you used.)_
+- `Ctrl‑o` — toggle **App** mode
+- `Ctrl‑f` — toggle **Switch** (windows) mode
+- `Ctrl‑t` — toggle **Themes** mode (filter themes; `Enter` applies the highlighted theme)
+
+> Theme switching is instant. Applied themes persist by writing the `theme` key in your `config.toml` (see below).
 
 ---
 
 ## Configuration
 
-YAL reads a TOML file and hot-reloads it on change.
+YAL reads TOML files from your XDG config directory and hot‑reloads on change.
 
-**Location**
+**Locations**
 
-- `~/.config/yal/config.toml`
+- `~/.config/yal/config.toml` (main app config)
+- `~/.config/yal/themes.toml` (named theme definitions)
 
-**Example**
+### Quick start: example files
 
+**`~/.config/yal/themes.toml`**
 ```toml
-# ~/.config/yal/config.toml
+# Define one or more named themes. Keys are color hex strings.
+# You can reference any section name here from `config.toml`'s `theme` key.
 
-# UI
-font = "ui-monospace, SFMono-Regular, Menlo, monospace"
-font_size = 14.0
+[catppuccin-mocha]
+bg_color      = "#1e1e2e"
+fg_color      = "#45475a"
+bg_font_color = "#cdd6f4"
+fg_font_color = "#cdd6f4"
 
-# Colors (CSS)
-bg_color = "#111111"        # app background
-fg_color = "#2a6ff0"        # highlight background for the selected row
-bg_font_color = "#e6e6e6"   # normal text color (on bg_color)
-fg_font_color = "#ffffff"   # text color on the highlighted row
-
-# Window (logical points)
-w_width = 720.0
-w_height = 380.0
-
-# Layout
-align_h = "center"          # left | center | right
-align_v = "top"             # top | center | bottom
-margin_x = 12.0             # px inset for left/right align
-margin_y = 12.0             # px inset for top/bottom align
-padding  = 6.0              # inner padding
-line_height = 1.2           # line height multiplier
-w_radius = 10.0             # corner radius in px
+[custom]
+bg_color      = "#0f0f14"
+fg_color      = "#2f81f7"
+bg_font_color = "#e6e6e6"
+fg_font_color = "#ffffff"
 ```
+
+**`~/.config/yal/config.toml`**
+```toml
+# Pick a theme by name (must exist in themes.toml).
+theme = "catppuccin-mocha"
+
+[font]
+font      = "Fira Code"   # CSS font stack allowed
+font_size = 12.0          # px
+
+[window]
+w_width     = 400.0       # logical points
+w_height    = 250.0
+align_h     = "center"    # left | center | right
+align_v     = "center"    # top  | center | bottom
+line_height = 0.8
+padding     = 8
+w_radius    = 0
+```
+
+> Any change you save will be applied live. If you change `theme = ...`, the UI updates immediately. `Ctrl‑T` in YAL lets you preview and apply a theme without editing files; it writes back the selected theme name to `config.toml` for persistence.
 
 ### Config reference
 
-| Key             | Type   | Description                                                                                           |
-|-----------------|--------|-------------------------------------------------------------------------------------------------------|
-| `font`          | string | CSS `font-family` stack applied to the UI.                                                            |
-| `font_size`     | float  | Base font size in **px** (e.g., `14.0`).                                                              |
-| `bg_color`      | string | App background color (CSS color).                                                                     |
-| `fg_color`      | string | **Row highlight background** for the selected item.                                                   |
-| `bg_font_color` | string | Text color for normal rows (text on `bg_color`).                                                      |
-| `fg_font_color` | string | Text color for the selected row (text on `fg_color`).                                                 |
-| `w_width`       | float  | Window width in logical points.                                                                       |
-| `w_height`      | float  | Window height in logical points.                                                                      |
-| `align_h`       | enum   | Horizontal alignment on the active display: `"left"` \| `"center"` \| `"right"`.                    |
-| `align_v`       | enum   | Vertical alignment on the active display: `"top"` \| `"center"` \| `"bottom"`.                      |
-| `margin_x`      | float  | Horizontal inset (in px) used when `align_h` is `"left"` or `"right"`.                                |
-| `margin_y`      | float  | Vertical inset (in px) used when `align_v` is `"top"` or `"bottom"`.                                  |
-| `padding`       | float  | Inner padding of the window (in px).                                                                  |
-| `line_height`   | float  | Line height multiplier for rows (e.g., `1.2`).                                                        |
-| `w_radius`      | float  | Window corner radius (in px).                                                                         |
+#### Theme (from `themes.toml`)
 
-> Any value you omit falls back to the built-in defaults. Save the file while YAL is open to see live updates.
+Each **theme** is a `[name]` table with these keys:
+
+| Key              | Type   | Description                                             |
+|------------------|--------|---------------------------------------------------------|
+| `bg_color`       | string | App background color (CSS hex or named color).         |
+| `fg_color`       | string | Row highlight background for the selected item.        |
+| `bg_font_color`  | string | Text color for normal rows (on `bg_color`).            |
+| `fg_font_color`  | string | Text color on the highlighted row (on `fg_color`).     |
+
+> Reference a theme in `config.toml` via `theme = "<name>"`.
+
+#### Font (`[font]` in `config.toml`)
+
+| Key          | Type   | Description                                                     |
+|--------------|--------|-----------------------------------------------------------------|
+| `font`       | string | CSS `font-family` stack applied to the UI.                      |
+| `font_size`  | float  | Base font size in **px** (e.g., `14.0`).                        |
+
+#### Window (`[window]` in `config.toml`)
+
+| Key           | Type   | Description                                                                 |
+|---------------|--------|-----------------------------------------------------------------------------|
+| `w_width`     | float  | Window width in logical points.                                             |
+| `w_height`    | float  | Window height in logical points.                                            |
+| `align_h`     | enum   | Horizontal alignment: `"left"` \| `"center"` \| `"right"`.                  |
+| `align_v`     | enum   | Vertical alignment: `"top"` \| `"center"` \| `"bottom"`.                    |
+| `padding`     | float  | Inner padding (px).                                                         |
+| `line_height` | float  | Line height multiplier for rows (e.g., `1.2`).                              |
+| `w_radius`    | float  | Corner radius (px).                                                         |
 
 ---
 
@@ -215,16 +244,13 @@ w_radius = 10.0             # corner radius in px
   That’s intentional; it hides on blur. Press `⌘ Space` again.
 
 - **Colors/fonts don’t change**  
-  Confirm you’re editing `~/.config/yal/config.toml` (or `$XDG_CONFIG_HOME/yal/config.toml`). Save and give it a second—YAL hot-reloads.
-
-- **App doesn’t appear**  
-  Make sure it’s an `.app` bundle in `/Applications`, `/System/Applications`, or `~/Applications`.
+  Confirm you’re editing files in `~/.config/yal/`. Save and give it a second—YAL hot‑reloads.
 
 - **Window switching doesn’t work**  
   - Grant **Accessibility** and **Screen Recording** permissions.  
   - Ensure Mission Control shortcuts are enabled (see above).  
   - Quit and relaunch YAL after granting permissions.  
-  - Some apps (or non-standard windows) may not expose the right metadata.
+  - Some apps (or non‑standard windows) may not expose the right metadata.
 
 ---
 
