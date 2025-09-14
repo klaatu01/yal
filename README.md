@@ -145,7 +145,7 @@ Spotlight also binds `⌘ Space`. Pick one:
 - `Ctrl‑f` — toggle **Switch** (windows) mode
 - `Ctrl‑t` — toggle **Themes** mode (filter themes; `Enter` applies the highlighted theme)
 
-> Theme switching is instant. Applied themes persist by writing the `theme` key in your `config.toml` (see below).
+> Theme switching is instant. Applied themes do not persist between restarts, you will need to hard code a chosen theme in `config.toml`.
 
 ---
 
