@@ -6631,6 +6631,7 @@ dependencies = [
  "toml 0.9.5",
  "walkdir",
  "yal-core",
+ "yal-theme",
 ]
 
 [[package]]
@@ -6639,6 +6640,13 @@ version = "0.0.0"
 dependencies = [
  "serde",
  "toml 0.9.5",
+]
+
+[[package]]
+name = "yal-theme"
+version = "0.0.0"
+dependencies = [
+ "yal-core",
 ]
 
 [[package]]

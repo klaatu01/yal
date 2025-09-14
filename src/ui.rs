@@ -1,8 +1,8 @@
 use leptos::web_sys::window;
 use wasm_bindgen::JsCast;
-use yal_core::AppConfig;
+use yal_core::{AppConfig, FontConfig, Theme, WindowConfig};
 
-pub fn apply(cfg: &AppConfig) {
+pub fn apply_theme_cfg(cfg: &Theme) {
     if let Some(doc) = window().and_then(|w| w.document()) {
         if let Some(root_el) = doc.document_element() {
             // Cast <html> Element -> HtmlElement to use the inherent web_sys::HtmlElement::style()
@@ -27,14 +27,16 @@ pub fn apply(cfg: &AppConfig) {
                 // text on highlight
                 let _ = style.set_property("--hl-text", v);
             }
+        }
+    }
+}
 
-            // Font family / size via CSS variables
-            if let Some(v) = &cfg.font {
-                let _ = style.set_property("--font", v);
-            }
-            if let Some(px) = cfg.font_size {
-                let _ = style.set_property("--fs", &format!("{px}px")); // e.g. "14px"
-            }
+pub fn apply_window_cfg(cfg: &WindowConfig) {
+    if let Some(doc) = window().and_then(|w| w.document()) {
+        if let Some(root_el) = doc.document_element() {
+            // Cast <html> Element -> HtmlElement to use the inherent web_sys::HtmlElement::style()
+            let html_el: leptos::web_sys::HtmlElement = root_el.unchecked_into();
+            let style = html_el.style();
 
             if let Some(pad) = &cfg.padding {
                 let _ = style.set_property("--pad", &format!("{pad}px"));
@@ -46,6 +48,23 @@ pub fn apply(cfg: &AppConfig) {
 
             if let Some(rad) = &cfg.w_radius {
                 let _ = style.set_property("--radius", &format!("{rad}px"));
+            }
+        }
+    }
+}
+
+pub fn apply_font_cfg(cfg: &FontConfig) {
+    if let Some(doc) = window().and_then(|w| w.document()) {
+        if let Some(root_el) = doc.document_element() {
+            // Cast <html> Element -> HtmlElement to use the inherent web_sys::HtmlElement::style()
+            let html_el: leptos::web_sys::HtmlElement = root_el.unchecked_into();
+            let style = html_el.style();
+
+            if let Some(v) = &cfg.font {
+                let _ = style.set_property("--font", v);
+            }
+            if let Some(px) = cfg.font_size {
+                let _ = style.set_property("--fs", &format!("{px}px")); // e.g. "14px"
             }
         }
     }

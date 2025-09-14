@@ -5,12 +5,30 @@ mod cmd;
 mod config;
 mod window;
 
-use crate::{ax::AX, cmd::run_cmd};
+use crate::{
+    ax::AX,
+    cmd::{run_cmd, theme::ThemeManager},
+};
 
 use std::sync::{Arc, RwLock};
 
 use config::load_config;
-use yal_core::AppConfig;
+use yal_core::{AppConfig, Theme};
+
+#[tauri::command]
+fn get_theme(
+    app: tauri::AppHandle,
+    theme_manager: tauri::State<Arc<RwLock<ThemeManager>>>,
+) -> Option<Theme> {
+    let config = current_cfg_or_default(&app);
+    let theme_manager = theme_manager.read().unwrap();
+    let themes = theme_manager.load_themes();
+    config
+        .theme
+        .as_ref()
+        .and_then(|name| themes.iter().find(|t| t.name.as_deref() == Some(name)))
+        .cloned()
+}
 
 #[tauri::command]
 fn get_config(state: tauri::State<Arc<RwLock<AppConfig>>>) -> Result<AppConfig, String> {
@@ -105,6 +123,13 @@ fn spawn_config_watcher(app: &tauri::AppHandle, state: Arc<RwLock<AppConfig>>) {
                         *lock = new_cfg.clone();
                     }
 
+                    // apply current theme name
+                    if let Some(theme_name) = &new_cfg.theme {
+                        let theme_manager = app_handle.state::<Arc<RwLock<ThemeManager>>>();
+                        let mut theme_manager = theme_manager.write().unwrap();
+                        theme_manager.apply_theme(&app_handle, theme_name);
+                    }
+
                     window::apply_window_size(&app_handle, &new_cfg);
 
                     window::position_main_window_on_mouse_display(&app_handle, &new_cfg);
@@ -178,6 +203,7 @@ pub fn run() {
             app.manage(Arc::new(RwLock::new(cfg)));
             app.set_activation_policy(ActivationPolicy::Accessory);
             app.manage(Arc::new(RwLock::new(AX::new(app.handle().clone()))));
+            app.manage(Arc::new(RwLock::new(ThemeManager::new())));
             let cfg_state = app.state::<Arc<RwLock<AppConfig>>>().inner().clone();
             spawn_config_watcher(&app.handle().clone(), cfg_state);
 
@@ -187,7 +213,8 @@ pub fn run() {
             run_cmd,
             hide_window,
             get_config,
-            reload_config
+            reload_config,
+            get_theme
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

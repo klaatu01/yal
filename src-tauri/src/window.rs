@@ -8,11 +8,13 @@ use yal_core::{AlignH, AlignV, AppConfig};
 
 pub fn apply_window_size(app: &tauri::AppHandle, cfg: &AppConfig) {
     if let Some(win) = app.get_webview_window("main") {
-        if let (Some(w), Some(h)) = (cfg.w_width, cfg.w_height) {
-            let _ = win.set_size(Size::Logical(LogicalSize {
-                width: w,
-                height: h,
-            }));
+        if let Some(window_cfg) = &cfg.window {
+            if let (Some(w), Some(h)) = (window_cfg.w_width, window_cfg.w_height) {
+                let _ = win.set_size(Size::Logical(LogicalSize {
+                    width: w,
+                    height: h,
+                }));
+            }
         }
     }
 }
@@ -104,11 +106,16 @@ pub fn position_main_window_on_mouse_display(app: &tauri::AppHandle, cfg: &AppCo
                 let sf = target.frame(); // screen frame (global coords)
                 let wf = nswin.frame(); // current window frame
 
-                // Alignment & margins
-                let ah = cfg.align_h.unwrap_or(AlignH::Center);
-                let av = cfg.align_v.unwrap_or(AlignV::Center);
-                let mx = cfg.margin_x.unwrap_or(12.0);
-                let my = cfg.margin_y.unwrap_or(12.0);
+                let (ah, av, mx, my) = if let Some(window_cfg) = &cfg.window {
+                    (
+                        window_cfg.align_h.unwrap_or(AlignH::Center),
+                        window_cfg.align_v.unwrap_or(AlignV::Center),
+                        window_cfg.margin_x.unwrap_or(12.0),
+                        window_cfg.margin_y.unwrap_or(12.0),
+                    )
+                } else {
+                    (AlignH::Center, AlignV::Center, 12.0, 12.0)
+                };
 
                 let top_left = compute_top_left_for_alignment(sf, wf, ah, av, mx, my);
                 nswin.setFrameTopLeftPoint(top_left);

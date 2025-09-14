@@ -8,12 +8,14 @@ use yal_core::{AppInfo, Command, WindowTarget};
 use crate::{ax::AX, cmd::app::get_app_info};
 
 mod app;
+pub mod theme;
 
 #[tauri::command]
 pub fn run_cmd(app: tauri::AppHandle, cmd: Command) -> Result<(), String> {
     match cmd {
         Command::App(app_info) => run_app_cmd(app, app_info),
         Command::Switch(target) => run_switch_cmd(app, target),
+        Command::Theme(theme) => run_theme_cmd(app, theme),
     }
 }
 
@@ -27,6 +29,13 @@ fn run_switch_cmd(app: tauri::AppHandle, target: WindowTarget) -> Result<(), Str
     let ax = app.state::<Arc<RwLock<AX>>>();
     let mut ax = ax.write().unwrap();
     ax.focus_window(WindowId(target.window_id));
+    Ok(())
+}
+
+fn run_theme_cmd(app: tauri::AppHandle, theme: String) -> Result<(), String> {
+    let theme_manager = app.state::<Arc<RwLock<theme::ThemeManager>>>();
+    let mut theme_manager = theme_manager.write().unwrap();
+    theme_manager.apply_theme(&app, &theme);
     Ok(())
 }
 
@@ -53,5 +62,15 @@ pub fn get_cmds(app: &tauri::AppHandle) -> Vec<Command> {
         .map(Command::Switch)
         .collect::<Vec<Command>>();
 
-    [app_infos, switch_targets].concat()
+    let themes = app
+        .state::<Arc<RwLock<theme::ThemeManager>>>()
+        .read()
+        .unwrap()
+        .load_themes()
+        .into_iter()
+        .filter_map(|t| t.name)
+        .map(Command::Theme)
+        .collect::<Vec<Command>>();
+
+    [app_infos, switch_targets, themes].concat()
 }

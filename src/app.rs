@@ -3,7 +3,7 @@ use leptos::{ev::KeyboardEvent, prelude::*};
 use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast; // for unchecked_into / dyn_into
-use yal_core::{AppConfig, Command, CommandKind};
+use yal_core::{AppConfig, Command, CommandKind, Theme};
 
 // NEW: fuzzy matcher imports
 use fuzzy_matcher::skim::SkimMatcherV2;
@@ -27,12 +27,32 @@ struct Empty {}
 
 /* --------------------------------- Events ----------------------------------- */
 
+fn init_theme_listener() {
+    leptos::task::spawn_local(async move {
+        let cb = Closure::<dyn FnMut(js_sys::Object)>::new(move |evt_obj: js_sys::Object| {
+            if let Ok(payload) = js_sys::Reflect::get(&evt_obj, &JsValue::from_str("payload")) {
+                if let Ok(theme) = serde_wasm_bindgen::from_value::<Theme>(payload) {
+                    crate::ui::apply_theme_cfg(&theme);
+                }
+            }
+        });
+
+        let _unlisten = tauri_listen("theme://applied", cb.as_ref().unchecked_ref()).await;
+        cb.forget();
+    });
+}
+
 fn init_config_listener() {
     leptos::task::spawn_local(async move {
         let cb = Closure::<dyn FnMut(js_sys::Object)>::new(move |evt_obj: js_sys::Object| {
             if let Ok(payload) = js_sys::Reflect::get(&evt_obj, &JsValue::from_str("payload")) {
                 if let Ok(cfg) = serde_wasm_bindgen::from_value::<AppConfig>(payload) {
-                    crate::ui::apply(&cfg);
+                    if let Some(window_cfg) = &cfg.window {
+                        crate::ui::apply_window_cfg(window_cfg);
+                    }
+                    if let Some(font_cfg) = &cfg.font {
+                        crate::ui::apply_font_cfg(font_cfg);
+                    }
                 }
             }
         });
@@ -66,7 +86,25 @@ fn load_config() {
         )
         .await;
         if let Ok(cfg) = serde_wasm_bindgen::from_value::<AppConfig>(config) {
-            crate::ui::apply(&cfg);
+            if let Some(window_cfg) = &cfg.window {
+                crate::ui::apply_window_cfg(window_cfg);
+            }
+            if let Some(font_cfg) = &cfg.font {
+                crate::ui::apply_font_cfg(font_cfg);
+            }
+        }
+    });
+}
+
+fn load_theme() {
+    spawn_local(async move {
+        let config = invoke(
+            "get_theme",
+            serde_wasm_bindgen::to_value(&Empty {}).unwrap(),
+        )
+        .await;
+        if let Ok(cfg) = serde_wasm_bindgen::from_value::<Theme>(config) {
+            crate::ui::apply_theme_cfg(&cfg);
         }
     });
 }
@@ -134,7 +172,9 @@ pub fn App() -> impl IntoView {
     };
 
     load_config();
+    load_theme();
     init_config_listener();
+    init_theme_listener();
     init_cmd_list_listener(set_cmd_list, reset);
 
     let filtered = Memo::new(move |_| {
@@ -147,6 +187,7 @@ pub fn App() -> impl IntoView {
     let prefix_text = Memo::new(move |_| match filter.get() {
         Some(CommandKind::App) => "open".to_string(),
         Some(CommandKind::Switch) => "switch".to_string(),
+        Some(CommandKind::Theme) => "theme".to_string(),
         None => String::new(),
     });
 
@@ -213,6 +254,15 @@ pub fn App() -> impl IntoView {
                     *f = match f {
                         Some(CommandKind::App) => None,
                         _ => Some(CommandKind::App),
+                    }
+                });
+            }
+            "t" if ev.ctrl_key() => {
+                ev.prevent_default();
+                set_filter.update(|f| {
+                    *f = match f {
+                        Some(CommandKind::Theme) => None,
+                        _ => Some(CommandKind::Theme),
                     }
                 });
             }

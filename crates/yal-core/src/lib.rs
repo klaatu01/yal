@@ -19,19 +19,21 @@ pub enum AlignV {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct AppConfig {
-    // UI
+    pub window: Option<WindowConfig>,
+    pub theme: Option<String>,
+    pub font: Option<FontConfig>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct FontConfig {
     pub font: Option<String>,
     pub font_size: Option<f32>,
-    pub bg_color: Option<String>,
-    pub fg_color: Option<String>,
-    pub bg_font_color: Option<String>,
-    pub fg_font_color: Option<String>,
+}
 
-    // Window size
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct WindowConfig {
     pub w_width: Option<f64>,
     pub w_height: Option<f64>,
-
-    // Alignment + margins (optional; defaults used if omitted)
     pub align_h: Option<AlignH>,  // "left" | "center" | "right"
     pub align_v: Option<AlignV>,  // "top"  | "center" | "bottom"
     pub margin_x: Option<f64>,    // px inset from left/right edges (default ~12)
@@ -39,6 +41,15 @@ pub struct AppConfig {
     pub padding: Option<f64>,     // px padding inside window (default ~6)
     pub line_height: Option<f64>, // line height multiplier (default ~1.2)
     pub w_radius: Option<f64>,    // window corner radius in px (default ~0)
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct Theme {
+    pub name: Option<String>,
+    pub bg_color: Option<String>,      // background color
+    pub fg_color: Option<String>,      // foreground color used for highlighting
+    pub bg_font_color: Option<String>, // font color used for background items
+    pub fg_font_color: Option<String>, // font color used for foreground items
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
@@ -59,6 +70,7 @@ pub struct WindowTarget {
 pub enum Command {
     App(AppInfo),
     Switch(WindowTarget),
+    Theme(String),
 }
 
 impl Display for Command {
@@ -78,6 +90,7 @@ impl Command {
                     t.app_name.clone()
                 }
             }
+            Command::Theme(name) => name.clone(),
         }
     }
 
@@ -85,6 +98,7 @@ impl Command {
         match self {
             Command::App(_) => "app",
             Command::Switch(_) => "switch",
+            Command::Theme(_) => "theme",
         }
     }
 }
@@ -93,13 +107,16 @@ impl Command {
 pub enum CommandKind {
     App,
     Switch,
+    Theme,
 }
 
 impl CommandKind {
     pub fn is_kind(&self, cmd: &Command) -> bool {
         matches!(
             (self, cmd),
-            (CommandKind::App, Command::App(_)) | (CommandKind::Switch, Command::Switch(_))
+            (CommandKind::App, Command::App(_))
+                | (CommandKind::Switch, Command::Switch(_))
+                | (CommandKind::Theme, Command::Theme(_))
         )
     }
 }
