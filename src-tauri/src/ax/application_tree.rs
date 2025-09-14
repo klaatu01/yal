@@ -55,6 +55,8 @@ pub struct WindowNode {
     pub is_focused: bool,
 }
 
+#[derive(Clone)]
+#[allow(dead_code)]
 pub struct SearchResult {
     pub display_id: DisplayId,
     pub space_id: SpaceId,
@@ -82,12 +84,13 @@ impl std::fmt::Display for SearchResult {
     }
 }
 
+#[allow(dead_code)]
 pub enum SearchParam {
     ByPid(i32),
     ByWindowId(WindowId),
     BySpaceId(SpaceId),
     ByDisplayId(DisplayId),
-    ByFocused,
+    Focused,
 }
 
 impl ApplicationTree {
@@ -179,7 +182,7 @@ impl ApplicationTree {
             SearchParam::ByWindowId(window_id) => self.search_by_window_id(window_id),
             SearchParam::BySpaceId(space_id) => self.search_by_space_id(space_id),
             SearchParam::ByDisplayId(display_id) => self.search_by_display_id(display_id),
-            SearchParam::ByFocused => self.search_by_focused(),
+            SearchParam::Focused => self.search_by_focused(),
         }
     }
 }

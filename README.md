@@ -14,6 +14,8 @@ A tiny, no-nonsense app launcher. Press `⌘ Space`, type a few letters, hit `En
 - **Fuzzy search**: type fragments like `gc` → finds “Google Chrome”.
 - **Monitor support**: works with multiple monitors.
 - **Config hot-reload**: update `config.toml` and it live-applies (colors, fonts, size) without restarting.
+- **Lightweight**: ~20 MB RAM, instant launch.
+- **Window Switching**: filter for currently running instances of apps and switch to them automatically.
 
 ---
 
@@ -26,12 +28,22 @@ A tiny, no-nonsense app launcher. Press `⌘ Space`, type a few letters, hit `En
   - `/System/Applications`
   - `~/Applications`
 - **Open app**: launches the selected `.app` bundle.
+- **Window switching**: Uses a mixture of Accessibility APIs and Private and *unstable* Skylight APIs to find and focus running app windows. (This is fragile and may break in future macOS versions.) 
+
 
 ---
 
 ## Installation
 
-Build from source
+### Install from Homebew
+
+I haven't sorted out notarization yet, so you need to use `--no-quarantine`:
+
+```bash
+brew install --cask --no-quarantine klaatu01/tap/yal
+```
+
+### Build from source
 
 **Prereqs**
 
@@ -56,19 +68,39 @@ cargo tauri build
 
 > If your setup uses Trunk and you see an error about missing config, add a minimal `Trunk.toml` next to your web `index.html`, or follow the project’s existing structure.
 
-Install from Homebew
-
-```bash
-brew install --cask --no-quarantine klaatu01/tap/yal
-```
-
 ---
 
-## Usage
+## Permissions
 
-- Press **`⌘ Space`** to toggle.
-- Type to filter. Use **↑/↓** to move, **Enter** to launch.
-- Press **Esc** to hide.
+### OS Requirements
+
+Only tested on an M4 Mac and requires at least macOS 15+
+
+### Accessibility & Screen Recording (macOS)
+
+Requires **Accessibility** Permissions and **Screen Recording** (for window switching).
+Grant them in System Settings → **Privacy & Security** → **Accessibility** and **Screen Recording**.
+_you shoudd be prompted to do this on first run._
+
+For window switching to work affectively, `yal` emulates keypresses to Mission Control, you need to make sure the following shortcuts are enabled.
+
+**System Settings** → **Keyboard** → **Keyboard Shortcuts…** → **Mission Control** → enable:
+    - **Move left a space** -> `Control + Left Arrow`
+    - **Move right a space** -> `Control + Right Arrow`
+    - **Move to space 1** -> `Control + 1`
+    - **Move to space 2** -> `Control + 2`
+    - **Move to space 3** -> `Control + 3`
+    - **Move to space 4** -> `Control + 4`
+    - **Move to space 5** -> `Control + 5`
+    - **Move to space 6** -> `Control + 6`
+    - **Move to space 7** -> `Control + 7`
+    - **Move to space 8** -> `Control + 8`
+    - **Move to space 9** -> `Control + 9`
+    - **Move to space 10** -> `Control + 0`
+
+### Autostart
+
+As `yal` is a long running process, you may want to add it to launch at login.
 
 ### Disable Spotlight’s shortcut (macOS)
 
@@ -76,6 +108,17 @@ Spotlight also uses `⌘ Space`. Pick one:
 
 - System Settings → **Keyboard** → **Keyboard Shortcuts…** → **Spotlight** → disable or remap **Show Spotlight**.  
 - Or change YAL’s shortcut in code (plugin config).
+
+---
+
+## Usage/Controls
+
+- `⌘ Space`: toggle YAL
+- Type to search (fuzzy match)
+- `up/down arrow` or `Ctrl-p/Ctrl-n`: navigate results
+- `Enter`: launch selected app or switch to its window
+- `Esc`: close YAL
+- `Ctrl-o/Ctrl-f` Toggles you between "app" and "switch" mode respectively, _yal will remember the last mode you used when it opens next time._
 
 ---
 
@@ -142,6 +185,12 @@ w_height = 380.0
 
 - **App doesn’t appear in the list**  
   Make sure it’s a proper `.app` bundle in `/Applications`, `/System/Applications`, or `~/Applications`.
+
+- **Window switching doesn’t work**
+    - Make sure you granted **Accessibility** and **Screen Recording** permissions in System Settings → **Privacy & Security**.
+    - Make sure the Mission Control shortcuts are enabled (see above).
+    - Try quitting and restarting YAL after granting permissions.
+    - It may not work with all apps, especially non-native ones.
 
 ---
 

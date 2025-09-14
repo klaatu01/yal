@@ -3,23 +3,14 @@ use tauri::{ActivationPolicy, Emitter, Manager, WindowEvent};
 mod ax;
 mod cmd;
 mod config;
+mod window;
 
 use crate::{ax::AX, cmd::run_cmd};
 
-use objc2::runtime::AnyObject;
-use objc2_app_kit::{
-    NSApp, NSApplicationActivationOptions, NSEvent, NSRunningApplication, NSScreen, NSWindow,
-    NSWindowCollectionBehavior, NSWorkspace,
-};
-use objc2_foundation::{MainThreadMarker, NSPoint, NSRect};
-
 use std::sync::{Arc, RwLock};
-use tauri::{LogicalSize, Size};
 
 use config::load_config;
-use yal_core::{AlignH, AlignV, AppConfig, Command};
-
-// ========== Shared: Config state & Tauri commands ==========
+use yal_core::AppConfig;
 
 #[tauri::command]
 fn get_config(state: tauri::State<Arc<RwLock<AppConfig>>>) -> Result<AppConfig, String> {
@@ -32,7 +23,7 @@ fn reload_config(
     state: tauri::State<Arc<RwLock<AppConfig>>>,
 ) -> Result<AppConfig, String> {
     let cfg = load_config();
-    apply_window_size(&app, &cfg);
+    window::apply_window_size(&app, &cfg);
     *state.write().unwrap() = cfg.clone();
     Ok(cfg)
 }
@@ -43,146 +34,18 @@ fn hide_window(app: tauri::AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-// ========== Shared: Window sizing & publishing ==========
-
-fn apply_window_size(app: &tauri::AppHandle, cfg: &AppConfig) {
-    if let Some(win) = app.get_webview_window("main") {
-        if let (Some(w), Some(h)) = (cfg.w_width, cfg.w_height) {
-            let _ = win.set_size(Size::Logical(LogicalSize {
-                width: w,
-                height: h,
-            }));
-        }
-    }
-}
-
 fn publish_cmd_list(app: &tauri::AppHandle) {
     let cmds: Vec<_> = cmd::get_cmds(app);
     let _ = app.emit("commands://updated", cmds);
 }
 
-// ========== Cross-platform window show/hide entry points ==========
-
 fn reveal_palette(app: &tauri::AppHandle) {
-    reveal_on_active_space(app);
+    let cfg = current_cfg_or_default(app);
+    window::reveal_on_active_space(app, &cfg);
 }
 
 fn hide_palette_window(app: &tauri::AppHandle) {
     app.hide().ok();
-}
-
-#[inline]
-fn point_in_rect(p: NSPoint, r: NSRect) -> bool {
-    p.x >= r.origin.x
-        && p.x <= r.origin.x + r.size.width
-        && p.y >= r.origin.y
-        && p.y <= r.origin.y + r.size.height
-}
-
-fn clamp(v: f64, lo: f64, hi: f64) -> f64 {
-    if v < lo {
-        lo
-    } else if v > hi {
-        hi
-    } else {
-        v
-    }
-}
-
-fn compute_top_left_for_alignment(
-    sf: NSRect, // screen frame (global coords)
-    wf: NSRect, // current window frame (size)
-    ah: AlignH,
-    av: AlignV,
-    mx: f64,
-    my: f64,
-) -> NSPoint {
-    // Horizontal placement
-    let mut x = match ah {
-        AlignH::Left => sf.origin.x + mx,
-        AlignH::Center => sf.origin.x + (sf.size.width - wf.size.width) / 2.0,
-        AlignH::Right => sf.origin.x + sf.size.width - wf.size.width - mx,
-    };
-    let min_x = sf.origin.x;
-    let max_x = sf.origin.x + sf.size.width - wf.size.width;
-    x = clamp(x, min_x, max_x);
-
-    // Vertical placement: NSWindow::setFrameTopLeftPoint uses top-left coordinates
-    let mut y = match av {
-        AlignV::Top => sf.origin.y + sf.size.height - my,
-        AlignV::Center => sf.origin.y + sf.size.height - (sf.size.height - wf.size.height) / 2.0,
-        AlignV::Bottom => sf.origin.y + wf.size.height + my,
-    };
-    let min_y = sf.origin.y + wf.size.height; // bottom edge + window height
-    let max_y = sf.origin.y + sf.size.height; // top edge
-    y = clamp(y, min_y, max_y);
-
-    NSPoint { x, y }
-}
-
-fn position_main_window_on_mouse_display(app: &tauri::AppHandle, cfg: &AppConfig) {
-    let _ = app.run_on_main_thread({
-        let cfg = cfg.clone();
-        let app = app.clone();
-        move || unsafe {
-            use objc2::rc::Retained;
-            let mtm = MainThreadMarker::new_unchecked();
-
-            if let Some(win) = app.get_webview_window("main") {
-                // Obtain NSWindow*
-                let ptr = win.ns_window().expect("missing NSWindow");
-                let any = &*(ptr as *mut AnyObject);
-                let nswin: &NSWindow = any.downcast_ref::<NSWindow>().expect("not an NSWindow");
-
-                // Follow active Space when activated.
-                let mut behavior = nswin.collectionBehavior();
-                behavior.insert(NSWindowCollectionBehavior::MoveToActiveSpace);
-                nswin.setCollectionBehavior(behavior);
-
-                // Target screen under mouse (fall back to first screen).
-                let mouse = NSEvent::mouseLocation();
-                let screens = NSScreen::screens(mtm);
-                let mut target: Option<Retained<NSScreen>> = None;
-                let mut first: Option<Retained<NSScreen>> = None;
-
-                for s in screens.iter() {
-                    if first.is_none() {
-                        first = Some(s.clone());
-                    }
-                    if point_in_rect(mouse, s.frame()) {
-                        target = Some(s);
-                        break;
-                    }
-                }
-                let target = target.or(first).expect("no NSScreen available");
-                let sf = target.frame(); // screen frame (global coords)
-                let wf = nswin.frame(); // current window frame
-
-                // Alignment & margins
-                let ah = cfg.align_h.unwrap_or(AlignH::Center);
-                let av = cfg.align_v.unwrap_or(AlignV::Center);
-                let mx = cfg.margin_x.unwrap_or(12.0);
-                let my = cfg.margin_y.unwrap_or(12.0);
-
-                let top_left = compute_top_left_for_alignment(sf, wf, ah, av, mx, my);
-                nswin.setFrameTopLeftPoint(top_left);
-            }
-        }
-    });
-}
-
-fn reveal_on_active_space(app: &tauri::AppHandle) {
-    // remember_current_frontmost(app);
-    position_main_window_on_mouse_display(app, &current_cfg_or_default(app));
-
-    if let Some(win) = app.get_webview_window("main") {
-        let _ = win.show();
-        let _ = app.run_on_main_thread(|| unsafe {
-            let mtm = MainThreadMarker::new_unchecked();
-            NSApp(mtm).activate();
-        });
-        let _ = win.set_focus();
-    }
 }
 
 fn current_cfg_or_default(app: &tauri::AppHandle) -> AppConfig {
@@ -242,9 +105,9 @@ fn spawn_config_watcher(app: &tauri::AppHandle, state: Arc<RwLock<AppConfig>>) {
                         *lock = new_cfg.clone();
                     }
 
-                    apply_window_size(&app_handle, &new_cfg);
+                    window::apply_window_size(&app_handle, &new_cfg);
 
-                    position_main_window_on_mouse_display(&app_handle, &new_cfg);
+                    window::position_main_window_on_mouse_display(&app_handle, &new_cfg);
 
                     let _ = app_handle.emit("config://updated", new_cfg);
                 }
@@ -253,8 +116,6 @@ fn spawn_config_watcher(app: &tauri::AppHandle, state: Arc<RwLock<AppConfig>>) {
         }
     });
 }
-
-// ========== Entrypoint ==========
 
 pub fn run() {
     tauri::Builder::default()
@@ -303,7 +164,6 @@ pub fn run() {
                 if let Some(focus) = focused {
                     _ax.focus_window(focus);
                 }
-                // On blur, hide without bringing previous app to front (mac) to avoid focus ping-pong
                 hide_palette_window(win.app_handle());
             }
             WindowEvent::CloseRequested { api, .. } => {
@@ -314,11 +174,10 @@ pub fn run() {
         })
         .setup(|app| {
             let cfg = load_config();
-            apply_window_size(app.handle(), &cfg);
+            window::apply_window_size(app.handle(), &cfg);
             app.manage(Arc::new(RwLock::new(cfg)));
             app.set_activation_policy(ActivationPolicy::Accessory);
             app.manage(Arc::new(RwLock::new(AX::new(app.handle().clone()))));
-
             let cfg_state = app.state::<Arc<RwLock<AppConfig>>>().inner().clone();
             spawn_config_watcher(&app.handle().clone(), cfg_state);
 
