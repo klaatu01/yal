@@ -1,4 +1,7 @@
-use std::sync::{Arc, RwLock};
+use std::{
+    sync::{Arc, RwLock},
+    thread,
+};
 
 use lightsky::WindowId;
 use tauri::Manager;
@@ -19,10 +22,16 @@ pub fn run_cmd(app: tauri::AppHandle, cmd: Command) -> Result<(), String> {
     }
 }
 
-fn run_app_cmd(app: tauri::AppHandle, AppInfo { path, .. }: AppInfo) -> Result<(), String> {
+fn run_app_cmd(app: tauri::AppHandle, AppInfo { path, name }: AppInfo) -> Result<(), String> {
     app.opener()
         .open_path(path, None::<&str>)
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+    thread::sleep(std::time::Duration::from_millis(500));
+    let ax = app.state::<Arc<RwLock<AX>>>();
+    let mut ax = ax.write().unwrap();
+    ax.refresh();
+    ax.try_focus_app(&name);
+    Ok(())
 }
 
 fn run_switch_cmd(app: tauri::AppHandle, target: WindowTarget) -> Result<(), String> {

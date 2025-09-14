@@ -148,6 +148,23 @@ impl AX {
         Some(())
     }
 
+    pub fn try_focus_app(&mut self, app_name: &str) {
+        if let Some(res) = self
+            .application_tree
+            .search(SearchParam::ByName(app_name.to_string()))
+            .first()
+        {
+            let SearchResult {
+                pid,
+                window_id,
+                space_id,
+                ..
+            } = res;
+            let _ = self.focus_space(*space_id);
+            self.focus.focus(&self.app, *pid, Some(*window_id));
+        }
+    }
+
     /// Find window, switch to its Space, then focus it.
     pub fn focus_window(&mut self, window_id: WindowId) {
         if let Some(res) = self

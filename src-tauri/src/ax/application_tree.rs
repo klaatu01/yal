@@ -90,6 +90,7 @@ pub enum SearchParam {
     ByWindowId(WindowId),
     BySpaceId(SpaceId),
     ByDisplayId(DisplayId),
+    ByName(String),
     Focused,
 }
 
@@ -183,6 +184,11 @@ impl ApplicationTree {
             SearchParam::BySpaceId(space_id) => self.search_by_space_id(space_id),
             SearchParam::ByDisplayId(display_id) => self.search_by_display_id(display_id),
             SearchParam::Focused => self.search_by_focused(),
+            SearchParam::ByName(name) => self
+                .flatten()
+                .into_iter()
+                .filter(|res| res.app_name == name)
+                .collect(),
         }
     }
 }
