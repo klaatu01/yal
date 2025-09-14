@@ -197,7 +197,7 @@ padding     = 8
 w_radius    = 0
 ```
 
-> Any change you save will be applied live. If you change `theme = ...`, the UI updates immediately. `Ctrl‑T` in YAL lets you preview and apply a theme without editing files; it writes back the selected theme name to `config.toml` for persistence.
+> Any change you save will be applied live. If you change `theme = ...`, the UI updates immediately. `Ctrl‑T` in YAL lets you preview a theme only.
 
 ### Config reference
 
