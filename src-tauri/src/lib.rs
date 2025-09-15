@@ -144,6 +144,7 @@ fn spawn_config_watcher(app: &tauri::AppHandle, state: Arc<RwLock<AppConfig>>) {
 
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_macos_permissions::init())
         .plugin(tauri_plugin_log::Builder::new().build())
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
@@ -198,6 +199,14 @@ pub fn run() {
             _ => {}
         })
         .setup(|app| {
+            tauri::async_runtime::block_on(async {
+                if !tauri_plugin_macos_permissions::check_accessibility_permission().await {
+                    tauri_plugin_macos_permissions::request_accessibility_permission().await;
+                }
+                if !tauri_plugin_macos_permissions::check_screen_recording_permission().await {
+                    tauri_plugin_macos_permissions::request_screen_recording_permission().await;
+                }
+            });
             let cfg = load_config();
             window::apply_window_size(app.handle(), &cfg);
             app.manage(Arc::new(RwLock::new(cfg)));

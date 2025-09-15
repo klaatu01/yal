@@ -4,14 +4,12 @@ mod application_tree;
 mod display;
 mod focus;
 mod mission_control_emu;
-mod permissions;
 
 use application_tree::{ApplicationTree, SearchParam, SearchResult};
 use display::DisplayManager;
 use focus::FocusManager;
 use lightsky::{DisplayId, Lightsky, SpaceId, WindowId};
 use mission_control_emu::MissionControlEmu;
-use permissions::PermissionsManager;
 use std::thread;
 
 #[derive(Clone, PartialEq, Eq, Hash)]
@@ -35,7 +33,6 @@ pub struct AX {
     pub current_display_space: DisplaySpace,
     // leaf managers
     display: DisplayManager,
-    perms: PermissionsManager,
     mc: MissionControlEmu,
     focus: FocusManager,
 }
@@ -50,9 +47,6 @@ impl std::fmt::Display for AX {
 
 impl AX {
     pub fn new(app: tauri::AppHandle) -> Self {
-        let perms = PermissionsManager::new();
-        perms.ensure();
-
         let display = DisplayManager::new();
         let mc = MissionControlEmu::new();
         let focus = FocusManager::new();
@@ -74,7 +68,6 @@ impl AX {
                 space_id: current_space,
             },
             display,
-            perms,
             mc,
             focus,
         }

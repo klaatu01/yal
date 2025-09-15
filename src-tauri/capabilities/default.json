@@ -13,6 +13,7 @@
 				{ "path": "/System/Applications/**/*.app" },
 				{ "path": "$HOME/Applications/**/*.app" }
 			]
-		}
+		},
+		"macos-permissions:default"
 	]
 }
