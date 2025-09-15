@@ -17,7 +17,6 @@ impl ThemeManager {
 
     pub fn load_themes(&self) -> Vec<yal_core::Theme> {
         let user_themes = config::load_themes();
-        log::info!("Loaded {} user themes", user_themes.len());
         let default_themes = ALL
             .iter()
             .copied()
@@ -32,6 +31,7 @@ impl ThemeManager {
             .iter()
             .find(|t| t.name.as_deref() == Some(theme_name))
         {
+            log::info!("Applying theme: {}", theme_name);
             let _ = app.emit("theme://applied", theme.clone());
         }
         self.current = Some(theme_name.to_string());

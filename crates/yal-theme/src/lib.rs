@@ -139,6 +139,25 @@ pub const TOKYO_NIGHT_STORM: ThemeRef = ThemeRef::new(
     "#E6E6E6",
 );
 
+// Yal Red
+pub const YAL_RED: ThemeRef = ThemeRef::new("yal-red", "#24273A", "#FF7A93", "#CAD3F5", "#242424");
+
+// Yal Blue
+pub const YAL_BLUE: ThemeRef =
+    ThemeRef::new("yal-blue", "#24273A", "#7AA2F7", "#CAD3F5", "#242424");
+
+// Yal Green
+pub const YAL_GREEN: ThemeRef =
+    ThemeRef::new("yal-green", "#24273A", "#9ECE6A", "#CAD3F5", "#242424");
+
+// Yal Yellow
+pub const YAL_YELLOW: ThemeRef =
+    ThemeRef::new("yal-yellow", "#24273A", "#E0AF68", "#CAD3F5", "#242424");
+
+// Yal Purple
+pub const YAL_PURPLE: ThemeRef =
+    ThemeRef::new("yal-purple", "#24273A", "#BB9AF7", "#CAD3F5", "#242424");
+
 /* --------------------------------- Registry --------------------------------- */
 
 pub const ALL: &[ThemeRef] = &[
@@ -156,6 +175,11 @@ pub const ALL: &[ThemeRef] = &[
     ONE_DARK,
     TOKYO_NIGHT,
     TOKYO_NIGHT_STORM,
+    YAL_RED,
+    YAL_BLUE,
+    YAL_GREEN,
+    YAL_YELLOW,
+    YAL_PURPLE,
 ];
 
 /// Case-insensitive lookup. Supports a few aliases.
@@ -171,6 +195,11 @@ pub fn by_name(name: &str) -> Option<ThemeRef> {
         "catppuccin-frappe" | "frappe" => "catppuccin-frappe",
         "catppuccin-macchiato" | "macchiato" => "catppuccin-macchiato",
         "catppuccin-mocha" | "mocha" => "catppuccin-mocha",
+        "yalred" | "yal-red" => "yal-red",
+        "yalblue" | "yal-blue" => "yal-blue",
+        "yalgreen" | "yal-green" => "yal-green",
+        "yalyellow" | "yal-yellow" => "yal-yellow",
+        "yalpurple" | "yal-purple" => "yal-purple",
         other => other,
     };
 

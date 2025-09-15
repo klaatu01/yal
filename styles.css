@@ -2,7 +2,7 @@
   --bg: #1e1e2e;
   --text: #bbbbbb;
   --hl: #cdd6f4;
-  --hl-text: #cdd6f4;
+  --hl-text: #1e1e2e;
 
   --bar-h: 32px;
   --pad: 8px;
@@ -62,6 +62,7 @@ body {
   /* keep the bar draggable elsewhere */
   font: inherit;
   user-select: none;
+  color: var(--hl);
 }
 
 /* Input fills remaining width; no special padding needed */
