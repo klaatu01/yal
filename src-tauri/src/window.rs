@@ -55,7 +55,7 @@ fn compute_top_left_for_alignment(
     let max_x = sf.origin.x + sf.size.width - wf.size.width;
     x = clamp(x, min_x, max_x);
 
-    // Vertical placement: NSWindow::setFrameTopLeftPoint uses top-left coordinates
+    // Vertical placement
     let mut y = match av {
         AlignV::Top => sf.origin.y + sf.size.height - my,
         AlignV::Center => sf.origin.y + sf.size.height - (sf.size.height - wf.size.height) / 2.0,
@@ -103,8 +103,8 @@ pub fn position_main_window_on_mouse_display(app: &tauri::AppHandle, cfg: &AppCo
                     }
                 }
                 let target = target.or(first).expect("no NSScreen available");
-                let sf = target.frame(); // screen frame (global coords)
-                let wf = nswin.frame(); // current window frame
+                let sf = target.frame();
+                let wf = nswin.frame();
 
                 let (ah, av, mx, my) = if let Some(window_cfg) = &cfg.window {
                     (
@@ -125,7 +125,6 @@ pub fn position_main_window_on_mouse_display(app: &tauri::AppHandle, cfg: &AppCo
 }
 
 pub fn reveal_on_active_space(app: &tauri::AppHandle, cfg: &AppConfig) {
-    // remember_current_frontmost(app);
     position_main_window_on_mouse_display(app, cfg);
 
     if let Some(win) = app.get_webview_window("main") {

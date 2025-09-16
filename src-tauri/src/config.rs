@@ -4,7 +4,6 @@ use std::{fs, path::PathBuf};
 use yal_core::AppConfig;
 
 fn config_base_path() -> PathBuf {
-    // Respect $XDG_CONFIG_HOME if present, otherwise use ~/.config/yal/config.toml
     let base = std::env::var_os("XDG_CONFIG_HOME")
         .map(PathBuf::from)
         .or_else(|| {
@@ -42,7 +41,6 @@ pub fn load_themes() -> Vec<yal_core::Theme> {
 }
 
 pub fn parse_themes(s: &str) -> Vec<yal_core::Theme> {
-    // 1) [[theme]] array-of-tables (singular)
     #[derive(Deserialize)]
     #[serde(deny_unknown_fields)]
     struct ArraySingular {
@@ -55,7 +53,6 @@ pub fn parse_themes(s: &str) -> Vec<yal_core::Theme> {
         }
     }
 
-    // 2) [[themes]] array-of-tables (plural)
     #[derive(Deserialize)]
     #[serde(deny_unknown_fields)]
     struct ArrayPlural {
@@ -68,7 +65,6 @@ pub fn parse_themes(s: &str) -> Vec<yal_core::Theme> {
         }
     }
 
-    // 3) [themes.NAME] tables
     #[derive(Deserialize)]
     #[serde(deny_unknown_fields)]
     struct Namespaced {
@@ -88,8 +84,6 @@ pub fn parse_themes(s: &str) -> Vec<yal_core::Theme> {
         }
     }
 
-    // 4) top-level map-of-tables: [monokai], [dracula], ...
-    // 4) top-level map-of-tables: [monokai], [dracula], ...
     if let Ok(map) = toml::from_str::<BTreeMap<String, yal_core::Theme>>(s) {
         if !map.is_empty() {
             return map
@@ -104,7 +98,6 @@ pub fn parse_themes(s: &str) -> Vec<yal_core::Theme> {
         }
     }
 
-    // 5) inline array: themes = [ {..}, {..} ]
     #[derive(Deserialize)]
     #[serde(deny_unknown_fields)]
     struct Inline {

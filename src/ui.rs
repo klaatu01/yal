@@ -1,30 +1,24 @@
 use leptos::web_sys::window;
 use wasm_bindgen::JsCast;
-use yal_core::{AppConfig, FontConfig, Theme, WindowConfig};
+use yal_core::{FontConfig, Theme, WindowConfig};
 
 pub fn apply_theme_cfg(cfg: &Theme) {
     if let Some(doc) = window().and_then(|w| w.document()) {
         if let Some(root_el) = doc.document_element() {
-            // Cast <html> Element -> HtmlElement to use the inherent web_sys::HtmlElement::style()
             let html_el: leptos::web_sys::HtmlElement = root_el.unchecked_into();
             let style = html_el.style();
 
-            // Backgrounds
             if let Some(v) = &cfg.bg_color {
                 let _ = style.set_property("--bg", v);
             }
             if let Some(v) = &cfg.fg_color {
-                // highlight background
                 let _ = style.set_property("--hl", v);
             }
 
-            // Text colors
             if let Some(v) = &cfg.bg_font_color {
-                // normal text (on --bg)
                 let _ = style.set_property("--text", v);
             }
             if let Some(v) = &cfg.fg_font_color {
-                // text on highlight
                 let _ = style.set_property("--hl-text", v);
             }
         }
@@ -34,7 +28,6 @@ pub fn apply_theme_cfg(cfg: &Theme) {
 pub fn apply_window_cfg(cfg: &WindowConfig) {
     if let Some(doc) = window().and_then(|w| w.document()) {
         if let Some(root_el) = doc.document_element() {
-            // Cast <html> Element -> HtmlElement to use the inherent web_sys::HtmlElement::style()
             let html_el: leptos::web_sys::HtmlElement = root_el.unchecked_into();
             let style = html_el.style();
 
@@ -56,7 +49,6 @@ pub fn apply_window_cfg(cfg: &WindowConfig) {
 pub fn apply_font_cfg(cfg: &FontConfig) {
     if let Some(doc) = window().and_then(|w| w.document()) {
         if let Some(root_el) = doc.document_element() {
-            // Cast <html> Element -> HtmlElement to use the inherent web_sys::HtmlElement::style()
             let html_el: leptos::web_sys::HtmlElement = root_el.unchecked_into();
             let style = html_el.style();
 

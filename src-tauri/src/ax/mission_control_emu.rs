@@ -33,7 +33,6 @@ impl MissionControlEmu {
             return false;
         };
 
-        // Ctrl down
         if let Ok(e) = CGEvent::new_keyboard_event(src.clone(), KC_CTRL, true) {
             e.post(CGEventTapLocation::HID);
         } else {
@@ -41,7 +40,6 @@ impl MissionControlEmu {
         }
         thread::sleep(Duration::from_millis(30));
 
-        // Digit down/up WITH ctrl flag set
         if let Ok(e) = CGEvent::new_keyboard_event(src.clone(), key, true) {
             e.set_flags(CGEventFlags::CGEventFlagControl);
             e.post(CGEventTapLocation::HID);
@@ -53,7 +51,6 @@ impl MissionControlEmu {
         }
         thread::sleep(Duration::from_millis(10));
 
-        // Ctrl up
         if let Ok(e) = CGEvent::new_keyboard_event(src, KC_CTRL, false) {
             e.post(CGEventTapLocation::HID);
         }

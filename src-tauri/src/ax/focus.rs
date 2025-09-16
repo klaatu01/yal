@@ -39,9 +39,7 @@ impl FocusManager {
         Self
     }
 
-    /// Bring app to foreground and (optionally) focus/raise a specific window by AXWindowNumber.
     pub fn focus(&self, app: &tauri::AppHandle, pid: i32, window_id: Option<WindowId>) {
-        // Activate app on main thread
         let _ = app.run_on_main_thread(move || unsafe {
             if let Some(app) = NSRunningApplication::runningApplicationWithProcessIdentifier(pid) {
                 let _ = app.activateWithOptions(NSApplicationActivationOptions::ActivateAllWindows);
@@ -104,7 +102,6 @@ impl FocusManager {
                     }
                 }
 
-                // Release the windows array we copied
                 CFRelease(windows_val);
 
                 if let Some(w_ref) = matched_window {

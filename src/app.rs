@@ -1,13 +1,11 @@
+use fuzzy_matcher::skim::SkimMatcherV2;
+use fuzzy_matcher::FuzzyMatcher;
 use leptos::task::spawn_local;
 use leptos::{ev::KeyboardEvent, prelude::*};
 use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::*;
-use wasm_bindgen::JsCast; // for unchecked_into / dyn_into
+use wasm_bindgen::JsCast;
 use yal_core::{AppConfig, Command, CommandKind, Theme};
-
-// NEW: fuzzy matcher imports
-use fuzzy_matcher::skim::SkimMatcherV2;
-use fuzzy_matcher::FuzzyMatcher;
 
 #[wasm_bindgen]
 extern "C" {
@@ -158,7 +156,6 @@ fn filter_memoized_commands(
     v
 }
 
-/* --------------------------------- Component ---------------------------------- */
 #[component]
 pub fn App() -> impl IntoView {
     let (cmds, set_cmd_list) = signal(Vec::<Command>::new());

@@ -5,18 +5,14 @@ use core_foundation::{array::CFArrayRef, base::CFTypeRef, string::CFStringRef};
 use libloading::{Library, Symbol};
 use std::ffi::c_void;
 
-// --- Opaque CF / private types ---
 pub type SLSConnectionID = i32;
 pub type CFUUIDRef = *const c_void;
 
-// --- Symbol table holding plain fn pointers and the Libraries to keep them alive ---
 pub struct SkylightSymbols {
-    _sky: Library, // SkyLight.framework
+    _sky: Library,
 
-    // Connections
     pub SLSMainConnectionID: unsafe extern "C" fn() -> SLSConnectionID,
 
-    // Windows in spaces
     pub SLSCopyWindowsWithOptionsAndTags: unsafe extern "C" fn(
         conn: SLSConnectionID,
         cid: i32,
@@ -47,7 +43,6 @@ pub struct SkylightSymbols {
     pub CGSRemoveWindowsFromSpaces:
         unsafe extern "C" fn(conn: SLSConnectionID, windows: CFArrayRef, spaces: CFArrayRef),
 
-    // Optional (not present on some builds): ask SkyLight which spaces a window lives in
     pub SLSCopySpacesForWindows: Option<
         unsafe extern "C" fn(conn: SLSConnectionID, windows: CFArrayRef, count: i32) -> CFTypeRef,
     >,
@@ -70,7 +65,6 @@ pub struct SkylightSymbols {
 impl SkylightSymbols {
     pub fn load() -> Result<Self> {
         unsafe {
-            // load DSOs
             let sky =
                 Library::new("/System/Library/PrivateFrameworks/SkyLight.framework/SkyLight")?;
 
@@ -246,13 +240,11 @@ impl SkylightSymbols {
 mod tests {
     use super::*;
 
-    // Only runs on macOS
     #[cfg(target_os = "macos")]
     #[test]
     fn can_load_skylight_and_get_connection() {
         let syms = SkylightSymbols::load().expect("SkyLight symbols should load");
         let conn = unsafe { (syms.SLSMainConnectionID)() };
-        // It's fine if it's 0 on some systems; we just want the call to succeed.
         assert!(
             conn >= 0,
             "connection id should be non-negative, got {conn}"

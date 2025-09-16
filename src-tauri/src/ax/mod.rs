@@ -1,5 +1,3 @@
-//! Orchestrator that wires the leaf modules together.
-
 mod application_tree;
 mod display;
 mod focus;
@@ -31,7 +29,6 @@ pub struct AX {
     pub lightsky: Lightsky,
     pub application_tree: ApplicationTree,
     pub current_display_space: DisplaySpace,
-    // leaf managers
     display: DisplayManager,
     mc: MissionControlEmu,
     focus: FocusManager,
@@ -95,7 +92,6 @@ impl AX {
         let target_display_id = self.application_tree.find_display_from_space(space_id)?;
         let target_space_index = self.application_tree.find_space_index(space_id)?;
 
-        // If target is on a different display, focus it first.
         if target_display_id != self.current_display_space.display_id {
             log::info!(
                 "Switch display: {} -> {}",
@@ -117,11 +113,11 @@ impl AX {
 
         if target_space_index <= 9 {
             log::info!("Press Ctrl+{}", target_space_index + 1);
-            let _ = self.mc.press_ctrl_digit(target_space_index + 1); // 1-based
+            let _ = self.mc.press_ctrl_digit(target_space_index + 1);
             thread::sleep(std::time::Duration::from_millis(200));
             return Some(());
         } else {
-            // Jump to space 10 (Ctrl+0), then arrow to target.
+            // Move to 10th space first, then move left/right as needed
             let _ = self.mc.press_ctrl_digit(10);
             thread::sleep(std::time::Duration::from_millis(250));
             let diff = (target_space_index as isize) - 9;
@@ -158,7 +154,6 @@ impl AX {
         }
     }
 
-    /// Find window, switch to its Space, then focus it.
     pub fn focus_window(&mut self, window_id: WindowId) {
         if let Some(res) = self
             .application_tree

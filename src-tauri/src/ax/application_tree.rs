@@ -198,10 +198,8 @@ extern "C" {
     fn CFArrayGetValueAtIndex(theArray: CFArrayRef, idx: isize) -> *const std::ffi::c_void;
 }
 
-/// Returns the focused window ID if available
 pub fn focused_window_id() -> Option<WindowId> {
     unsafe {
-        // Get info about the frontmost (top-level, onscreen) window
         let info = CGWindowListCopyWindowInfo(kCGWindowListOptionOnScreenOnly, kCGNullWindowID);
         if info.is_null() {
             return None;
@@ -212,7 +210,6 @@ pub fn focused_window_id() -> Option<WindowId> {
             return None;
         }
 
-        // First entry in the list is usually the frontmost window
         let dict_ref = CFArrayGetValueAtIndex(info, 0) as CFDictionaryRef;
 
         if dict_ref.is_null() {

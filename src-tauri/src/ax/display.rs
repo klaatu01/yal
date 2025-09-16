@@ -28,8 +28,6 @@ impl DisplayManager {
         Self
     }
 
-    /// UUID string for the active (main) screen, executed on the main thread.
-    /// Falls back to the primary display if AppKit returns nothing.
     pub fn active_display_id(&self, app: &tauri::AppHandle) -> Option<DisplayId> {
         let (tx, rx) = std::sync::mpsc::channel();
 
@@ -44,8 +42,6 @@ impl DisplayManager {
         rx.recv().ok().flatten()
     }
 
-    /// Warp the cursor to the center of the display by its ColorSync UUID.
-    /// This selects the “active display” for Mission Control keyboard shortcuts.
     pub fn focus_display_center(&self, display_uuid: &DisplayId) -> Option<()> {
         let did = cg_display_id_for_uuid(display_uuid)?;
         unsafe {
@@ -59,8 +55,6 @@ impl DisplayManager {
         Some(())
     }
 }
-
-/* ------------------------- internal helpers (private) ------------------------- */
 
 fn screen_display_id(screen: &NSScreen) -> Option<CGDirectDisplayID> {
     let desc: Retained<NSDictionary<NSString, objc2::runtime::AnyObject>> =

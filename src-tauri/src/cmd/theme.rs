@@ -11,6 +11,7 @@ impl ThemeManager {
         Self { current: None }
     }
 
+    #[allow(dead_code)]
     pub fn set_current(&mut self, theme_name: &str) {
         self.current = Some(theme_name.to_string());
     }

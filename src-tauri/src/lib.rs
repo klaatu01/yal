@@ -96,26 +96,22 @@ fn spawn_config_watcher(app: &tauri::AppHandle, state: Arc<RwLock<AppConfig>>) {
             .watch(&watch_dir, RecursiveMode::NonRecursive)
             .expect("failed to watch config directory");
 
-        // Simple debounce to avoid partial writes
         let mut last_reload = std::time::Instant::now();
 
         while let Ok(res) = rx.recv() {
             match res {
                 Ok(event) => {
-                    // Only care if the changed path is the config file
                     let relevant = event.paths.iter().any(|p| p == &cfg_path);
                     if !relevant {
                         continue;
                     }
 
-                    // debounce ~120ms
                     if last_reload.elapsed() < Duration::from_millis(120) {
                         continue;
                     }
                     last_reload = std::time::Instant::now();
                     std::thread::sleep(Duration::from_millis(50));
 
-                    // Reload + apply + push
                     let new_cfg = config::load_config();
 
                     {
@@ -123,7 +119,6 @@ fn spawn_config_watcher(app: &tauri::AppHandle, state: Arc<RwLock<AppConfig>>) {
                         *lock = new_cfg.clone();
                     }
 
-                    // apply current theme name
                     if let Some(theme_name) = &new_cfg.theme {
                         let theme_manager = app_handle.state::<Arc<RwLock<ThemeManager>>>();
                         let mut theme_manager = theme_manager.write().unwrap();

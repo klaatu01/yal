@@ -43,44 +43,26 @@ impl From<ThemeRef> for Theme {
     }
 }
 
-/* ------------------------------ Theme constants ------------------------------ */
-/* Notes:
- * - `fg_color` is treated as the *highlight background*.
- * - `bg_font_color` is normal text on `bg_color`.
- * - `fg_font_color` is text on the highlighted row (`fg_color`).
- * Tweak to taste per your UI.
- */
+pub const MONOKAI: ThemeRef = ThemeRef::new("monokai", "#272822", "#49483E", "#F8F8F2", "#FFFFFF");
 
-// Monokai (classic)
-pub const MONOKAI: ThemeRef = ThemeRef::new(
-    "monokai", "#272822", // bg
-    "#49483E", // highlight bg
-    "#F8F8F2", // text on bg
-    "#FFFFFF", // text on highlight
-);
-
-// Dracula
 pub const DRACULA: ThemeRef = ThemeRef::new("dracula", "#282A36", "#44475A", "#F8F8F2", "#FFFFFF");
 
-// Catppuccin — Latte (light)
 pub const CATPPUCCIN_LATTE: ThemeRef = ThemeRef::new(
     "catppuccin-latte",
-    "#EFF1F5", // base
-    "#CCD0DA", // surface2-ish as highlight
-    "#4C4F69", // text
-    "#1E1E2E", // strong text on highlight
+    "#EFF1F5",
+    "#CCD0DA",
+    "#4C4F69",
+    "#1E1E2E",
 );
 
-// Catppuccin — Frappé (dark)
 pub const CATPPUCCIN_FRAPPE: ThemeRef = ThemeRef::new(
     "catppuccin-frappe",
-    "#303446", // base
-    "#414559", // surface1
-    "#C6D0F5", // text
-    "#E6E9EF", // text on highlight
+    "#303446",
+    "#414559",
+    "#C6D0F5",
+    "#E6E9EF",
 );
 
-// Catppuccin — Macchiato (dark)
 pub const CATPPUCCIN_MACCHIATO: ThemeRef = ThemeRef::new(
     "catppuccin-macchiato",
     "#24273A",
@@ -89,7 +71,6 @@ pub const CATPPUCCIN_MACCHIATO: ThemeRef = ThemeRef::new(
     "#E8E8E8",
 );
 
-// Catppuccin — Mocha (dark)
 pub const CATPPUCCIN_MOCHA: ThemeRef = ThemeRef::new(
     "catppuccin-mocha",
     "#1E1E2E",
@@ -98,11 +79,9 @@ pub const CATPPUCCIN_MOCHA: ThemeRef = ThemeRef::new(
     "#E6E6E6",
 );
 
-// Solarized Dark
 pub const SOLARIZED_DARK: ThemeRef =
     ThemeRef::new("solarized-dark", "#002B36", "#073642", "#93A1A1", "#FDF6E3");
 
-// Solarized Light
 pub const SOLARIZED_LIGHT: ThemeRef = ThemeRef::new(
     "solarized-light",
     "#FDF6E3",
@@ -111,26 +90,20 @@ pub const SOLARIZED_LIGHT: ThemeRef = ThemeRef::new(
     "#073642",
 );
 
-// Gruvbox Dark (hard-ish)
 pub const GRUVBOX_DARK: ThemeRef =
     ThemeRef::new("gruvbox-dark", "#282828", "#3C3836", "#EBDBB2", "#FBF1C7");
 
-// Gruvbox Light
 pub const GRUVBOX_LIGHT: ThemeRef =
     ThemeRef::new("gruvbox-light", "#FBF1C7", "#EBDBB2", "#3C3836", "#282828");
 
-// Nord
 pub const NORD: ThemeRef = ThemeRef::new("nord", "#2E3440", "#3B4252", "#D8DEE9", "#ECEFF4");
 
-// One Dark
 pub const ONE_DARK: ThemeRef =
     ThemeRef::new("one-dark", "#282C34", "#3E4451", "#ABB2BF", "#FFFFFF");
 
-// Tokyo Night (classic)
 pub const TOKYO_NIGHT: ThemeRef =
     ThemeRef::new("tokyo-night", "#1A1B26", "#2F334D", "#C0CAF5", "#E6E6E6");
 
-// Tokyo Night Storm
 pub const TOKYO_NIGHT_STORM: ThemeRef = ThemeRef::new(
     "tokyo-night-storm",
     "#24283B",
@@ -139,26 +112,19 @@ pub const TOKYO_NIGHT_STORM: ThemeRef = ThemeRef::new(
     "#E6E6E6",
 );
 
-// Yal Red
 pub const YAL_RED: ThemeRef = ThemeRef::new("yal-red", "#24273A", "#FF7A93", "#CAD3F5", "#242424");
 
-// Yal Blue
 pub const YAL_BLUE: ThemeRef =
     ThemeRef::new("yal-blue", "#24273A", "#7AA2F7", "#CAD3F5", "#242424");
 
-// Yal Green
 pub const YAL_GREEN: ThemeRef =
     ThemeRef::new("yal-green", "#24273A", "#9ECE6A", "#CAD3F5", "#242424");
 
-// Yal Yellow
 pub const YAL_YELLOW: ThemeRef =
     ThemeRef::new("yal-yellow", "#24273A", "#E0AF68", "#CAD3F5", "#242424");
 
-// Yal Purple
 pub const YAL_PURPLE: ThemeRef =
     ThemeRef::new("yal-purple", "#24273A", "#BB9AF7", "#CAD3F5", "#242424");
-
-/* --------------------------------- Registry --------------------------------- */
 
 pub const ALL: &[ThemeRef] = &[
     MONOKAI,
@@ -206,12 +172,9 @@ pub fn by_name(name: &str) -> Option<ThemeRef> {
     ALL.iter().copied().find(|t| t.name == normalized)
 }
 
-/// Owned theme list (useful for config UIs).
 pub fn list_owned() -> Vec<Theme> {
     ALL.iter().copied().map(Theme::from).collect()
 }
-
-/* ----------------------------------- Tests ---------------------------------- */
 
 #[cfg(test)]
 mod tests {

@@ -13,7 +13,7 @@ fn read_app_name(bundle_path: &Path) -> String {
             }
         }
     }
-    // Fallback to folder name without ".app"
+
     bundle_path
         .file_stem()
         .and_then(|s| s.to_str())
