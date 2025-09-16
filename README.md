@@ -4,7 +4,7 @@ A tiny, no-nonsense app launcher. Press `⌘ Space`, type a few letters, hit `En
 
 ---
 
-![yal](https://github.com/user-attachments/assets/1b3bb73f-17df-4037-8c03-667692a3d87c)
+![yal-modes](https://github.com/user-attachments/assets/c83384ef-0f9a-46ee-a3a1-ab3b13c0f205)
 
 ---
 
@@ -177,7 +177,7 @@ w_radius    = 0
 
 #### Theme (from `themes.toml`)
 
-![yal-theme](https://github.com/user-attachments/assets/b26908d7-583c-4c8b-8efa-7d295356f364)
+![yal-theme](https://github.com/user-attachments/assets/49cb1c21-b55a-4b4e-9587-2d3aa750978c)
 
 
 Each **theme** is a `[name]` table with these keys:
