@@ -31,6 +31,8 @@ A tiny, no-nonsense app launcher. Press `⌘ Space`, type a few letters, hit `En
 - **Launching**: opens the selected `.app` bundle.
 - **Switching**: focuses an existing app/window using Accessibility APIs plus a small amount of Mission Control key‑emulation (see below).
 
+![yal](https://github.com/user-attachments/assets/6c192bcf-8431-4c55-b038-5f7070069bbd)
+
 ---
 
 ## Installation
