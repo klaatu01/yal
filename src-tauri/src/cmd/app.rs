@@ -39,10 +39,70 @@ fn collect_apps_in(dir: &Path) -> Vec<AppInfo> {
     out
 }
 
+fn collect_system_preferences() -> Vec<AppInfo> {
+    const PREFS: &[(&str, &str)] = &[
+        ("Bluetooth", "x-apple.systempreferences:com.apple.Bluetooth"),
+        (
+            "Network",
+            "x-apple.systempreferences:com.apple.preference.network",
+        ),
+        (
+            "Privacy & Security",
+            "x-apple.systempreferences:com.apple.preference.security",
+        ),
+        (
+            "Notifications",
+            "x-apple.systempreferences:com.apple.preference.notifications",
+        ),
+        (
+            "Sound",
+            "x-apple.systempreferences:com.apple.preference.sound",
+        ),
+        (
+            "Displays",
+            "x-apple.systempreferences:com.apple.preference.displays",
+        ),
+        (
+            "Keyboard",
+            "x-apple.systempreferences:com.apple.preference.keyboard",
+        ),
+        (
+            "Mouse",
+            "x-apple.systempreferences:com.apple.preference.mouse",
+        ),
+        (
+            "Trackpad",
+            "x-apple.systempreferences:com.apple.preference.trackpad",
+        ),
+        (
+            "Battery / Energy Saver",
+            "x-apple.systempreferences:com.apple.preference.energysaver",
+        ),
+        (
+            "Date & Time",
+            "x-apple.systempreferences:com.apple.preference.datetime",
+        ),
+        (
+            "Accessibility",
+            "x-apple.systempreferences:com.apple.preference.universalaccess",
+        ),
+        ("Wi-Fi", "x-apple.systempreferences:com.apple.WiFiSettings"),
+    ];
+
+    PREFS
+        .iter()
+        .map(|(label, uri)| AppInfo {
+            name: format!("system preferences - {}", label),
+            path: (*uri).to_string(),
+        })
+        .collect()
+}
+
 pub fn get_app_info() -> Result<Vec<AppInfo>, String> {
     let mut apps: Vec<AppInfo> = Vec::new();
     apps.append(&mut collect_apps_in(Path::new("/Applications")));
     apps.append(&mut collect_apps_in(Path::new("/System/Applications")));
+    apps.append(&mut collect_system_preferences());
     if let Some(home) = dirs::home_dir() {
         apps.append(&mut collect_apps_in(&home.join("Applications")));
     }

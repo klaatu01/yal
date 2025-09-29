@@ -31,6 +31,14 @@ fn run_app_cmd(app: tauri::AppHandle, AppInfo { path, name }: AppInfo) -> Result
     let mut ax = ax.write().unwrap();
     ax.refresh();
     ax.try_focus_app(&name);
+
+    log::info!("launched app: {}", name);
+
+    // Special case: hide the app after launching it, if it's Screenshot
+    if name == "Screenshot" {
+        app.hide().map_err(|e| e.to_string())?;
+    }
+
     Ok(())
 }
 
