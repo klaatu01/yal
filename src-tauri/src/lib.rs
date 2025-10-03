@@ -1,5 +1,7 @@
 use tauri::{ActivationPolicy, Emitter, Manager, WindowEvent};
+use yal_plugin::PluginManager;
 
+mod actor;
 mod ax;
 mod cmd;
 mod config;
@@ -210,6 +212,17 @@ pub fn run() {
             app.manage(Arc::new(RwLock::new(ThemeManager::new())));
             let cfg_state = app.state::<Arc<RwLock<AppConfig>>>().inner().clone();
             spawn_config_watcher(&app.handle().clone(), cfg_state);
+            let manager = Arc::new(RwLock::new(PluginManager::new()));
+
+            tauri::async_runtime::block_on(async {
+                let manager = manager.clone();
+                let mut manager_guard = manager.write().unwrap();
+                manager_guard.init().await.unwrap();
+                manager_guard.load_config().await.unwrap();
+                manager_guard.install().await.unwrap();
+            });
+
+            app.manage(manager);
 
             Ok(())
         })

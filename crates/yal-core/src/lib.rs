@@ -71,6 +71,13 @@ pub enum Command {
     App(AppInfo),
     Switch(WindowTarget),
     Theme(String),
+    Plugin(PluginInfo),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct PluginInfo {
+    pub plugin_name: String,
+    pub command_name: String,
 }
 
 impl Display for Command {
@@ -91,6 +98,7 @@ impl Command {
                 }
             }
             Command::Theme(name) => name.clone(),
+            Command::Plugin(info) => format!("{} - {}", info.plugin_name, info.command_name),
         }
     }
 
@@ -99,6 +107,7 @@ impl Command {
             Command::App(_) => "app",
             Command::Switch(_) => "switch",
             Command::Theme(_) => "theme",
+            Command::Plugin(_) => "plugin",
         }
     }
 }
@@ -108,6 +117,7 @@ pub enum CommandKind {
     App,
     Switch,
     Theme,
+    Plugin,
 }
 
 impl CommandKind {
@@ -117,6 +127,7 @@ impl CommandKind {
             (CommandKind::App, Command::App(_))
                 | (CommandKind::Switch, Command::Switch(_))
                 | (CommandKind::Theme, Command::Theme(_))
+                | (CommandKind::Plugin, Command::Plugin(_))
         )
     }
 }

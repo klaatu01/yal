@@ -7,10 +7,12 @@ use lightsky::WindowId;
 use tauri::Manager;
 use tauri_plugin_opener::OpenerExt;
 use yal_core::{AppInfo, Command, WindowTarget};
+use yal_plugin::PluginManager;
 
 use crate::{ax::AX, cmd::app::get_app_info};
 
 mod app;
+pub mod plugin;
 pub mod theme;
 
 #[tauri::command]
@@ -19,6 +21,7 @@ pub fn run_cmd(app: tauri::AppHandle, cmd: Command) -> Result<(), String> {
         Command::App(app_info) => run_app_cmd(app, app_info),
         Command::Switch(target) => run_switch_cmd(app, target),
         Command::Theme(theme) => run_theme_cmd(app, theme),
+        Command::Plugin(info) => plugin::run_plugin_cmd(app, info),
     }
 }
 
@@ -40,6 +43,18 @@ fn run_app_cmd(app: tauri::AppHandle, AppInfo { path, name }: AppInfo) -> Result
     }
 
     Ok(())
+}
+
+fn run_plugin_cmd(
+    app: tauri::AppHandle,
+    info: crate::cmd::plugin::PluginInfo,
+) -> Result<(), String> {
+    let ax = app.state::<Arc<RwLock<AX>>>();
+    let mut ax = ax.write().unwrap();
+
+    let manager = app.state::<Arc<RwLock<PluginManager>>>();
+    let manager = manager.read().unwrap();
+    manager.run_command(&info.plugin_name, &info.command_name)?;
 }
 
 fn run_switch_cmd(app: tauri::AppHandle, target: WindowTarget) -> Result<(), String> {
