@@ -1,7 +1,51 @@
+use anyhow::Result;
+use kameo::prelude::Message;
+use kameo::Actor;
 use serde::Deserialize;
 use std::collections::BTreeMap;
 use std::{fs, path::PathBuf};
 use yal_core::AppConfig;
+
+#[derive(Actor)]
+pub struct ConfigActor {
+    config: AppConfig,
+}
+
+impl ConfigActor {
+    pub fn new() -> Self {
+        let config = load_config();
+        Self { config }
+    }
+}
+
+pub struct ReloadConfig;
+
+impl Message<ReloadConfig> for ConfigActor {
+    type Reply = Result<()>;
+
+    async fn handle(
+        &mut self,
+        _msg: ReloadConfig,
+        _ctx: &mut kameo::prelude::Context<Self, Self::Reply>,
+    ) -> Self::Reply {
+        self.config = load_config();
+        Ok(())
+    }
+}
+
+pub struct GetConfig;
+
+impl Message<GetConfig> for ConfigActor {
+    type Reply = Result<AppConfig>;
+
+    async fn handle(
+        &mut self,
+        _msg: GetConfig,
+        _ctx: &mut kameo::prelude::Context<Self, Self::Reply>,
+    ) -> Self::Reply {
+        Ok(self.config.clone())
+    }
+}
 
 fn config_base_path() -> PathBuf {
     let base = std::env::var_os("XDG_CONFIG_HOME")

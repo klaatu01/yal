@@ -3,6 +3,8 @@ use core_foundation::string::CFString;
 use core_foundation::uuid::CFUUID;
 use core_graphics::display::CGDirectDisplayID;
 use core_graphics::geometry::{CGPoint, CGRect};
+use kameo::prelude::Message;
+use kameo::Actor;
 use lightsky::DisplayId;
 use objc2::rc::Retained;
 use objc2_app_kit::NSScreen;
@@ -21,11 +23,44 @@ extern "C" {
     fn CGWarpMouseCursorPosition(newCursorPosition: CGPoint) -> i32; // CGError
 }
 
-pub struct DisplayManager;
+#[derive(Actor)]
+pub struct DisplayManagerActor {
+    app_handle: tauri::AppHandle,
+}
 
-impl DisplayManager {
-    pub fn new() -> Self {
-        Self
+pub struct ActiveDisplayRequest;
+
+impl Message<ActiveDisplayRequest> for DisplayManagerActor {
+    type Reply = Option<DisplayId>;
+
+    async fn handle(
+        &mut self,
+        _msg: ActiveDisplayRequest,
+        _ctx: &mut kameo::prelude::Context<Self, Self::Reply>,
+    ) -> Self::Reply {
+        self.active_display_id(&self.app_handle)
+    }
+}
+
+pub struct FocusDisplayCenter {
+    pub display_id: DisplayId,
+}
+
+impl Message<FocusDisplayCenter> for DisplayManagerActor {
+    type Reply = Option<()>;
+
+    async fn handle(
+        &mut self,
+        msg: FocusDisplayCenter,
+        _ctx: &mut kameo::prelude::Context<Self, Self::Reply>,
+    ) -> Self::Reply {
+        self.focus_display_center(&msg.display_id)
+    }
+}
+
+impl DisplayManagerActor {
+    pub fn new(app_handle: tauri::AppHandle) -> Self {
+        Self { app_handle }
     }
 
     pub fn active_display_id(&self, app: &tauri::AppHandle) -> Option<DisplayId> {
