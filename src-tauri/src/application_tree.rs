@@ -4,10 +4,83 @@ use core_graphics::display::CFDictionaryRef;
 use core_graphics::window::{
     kCGNullWindowID, kCGWindowListOptionOnScreenOnly, CGWindowListCopyWindowInfo,
 };
+use kameo::prelude::Message;
+use kameo::Actor;
 use lightsky::{DisplayId, Lightsky, SpaceId, WindowId};
 
 use core_foundation::base::{CFTypeRef, TCFType};
 use core_foundation::string::CFString;
+
+#[derive(Actor)]
+pub struct ApplicationTreeActor {
+    tree: ApplicationTree,
+    ls: Lightsky,
+}
+
+impl ApplicationTreeActor {
+    pub fn new(ls: Lightsky) -> Self {
+        let tree = ApplicationTree::new(&ls);
+        Self { tree, ls }
+    }
+}
+
+impl Message<SearchParam> for ApplicationTreeActor {
+    type Reply = Vec<SearchResult>;
+
+    async fn handle(
+        &mut self,
+        param: SearchParam,
+        _ctx: &mut kameo::prelude::Context<Self, Self::Reply>,
+    ) -> Self::Reply {
+        self.tree.search(param)
+    }
+}
+
+pub struct RefreshTree;
+
+impl Message<RefreshTree> for ApplicationTreeActor {
+    type Reply = ();
+
+    async fn handle(
+        &mut self,
+        _msg: RefreshTree,
+        _ctx: &mut kameo::prelude::Context<Self, Self::Reply>,
+    ) -> Self::Reply {
+        self.tree = ApplicationTree::new(&self.ls);
+    }
+}
+
+pub struct FindDisplayFromSpace {
+    pub space_id: SpaceId,
+}
+
+impl Message<FindDisplayFromSpace> for ApplicationTreeActor {
+    type Reply = Option<DisplayId>;
+
+    async fn handle(
+        &mut self,
+        msg: FindDisplayFromSpace,
+        _ctx: &mut kameo::prelude::Context<Self, Self::Reply>,
+    ) -> Self::Reply {
+        self.tree.find_display_from_space(msg.space_id)
+    }
+}
+
+pub struct FindSpaceIndex {
+    pub space_id: SpaceId,
+}
+
+impl Message<FindSpaceIndex> for ApplicationTreeActor {
+    type Reply = Option<usize>;
+
+    async fn handle(
+        &mut self,
+        msg: FindSpaceIndex,
+        _ctx: &mut kameo::prelude::Context<Self, Self::Reply>,
+    ) -> Self::Reply {
+        self.tree.find_space_index(msg.space_id)
+    }
+}
 
 pub struct ApplicationTree {
     pub displays: Vec<DisplayNode>,
@@ -86,6 +159,7 @@ impl std::fmt::Display for SearchResult {
 
 #[allow(dead_code)]
 pub enum SearchParam {
+    All,
     ByPid(i32),
     ByWindowId(WindowId),
     BySpaceId(SpaceId),
@@ -179,6 +253,7 @@ impl ApplicationTree {
 
     pub fn search(&self, param: SearchParam) -> Vec<SearchResult> {
         match param {
+            SearchParam::All => self.flatten(),
             SearchParam::ByPid(pid) => self.search_by_pid(pid),
             SearchParam::ByWindowId(window_id) => self.search_by_window_id(window_id),
             SearchParam::BySpaceId(space_id) => self.search_by_space_id(space_id),

@@ -2,6 +2,8 @@ use core_foundation::array::CFArrayRef;
 use core_foundation::base::{CFTypeRef, TCFType};
 use core_foundation::number::CFNumber;
 use core_foundation::string::{CFString, CFStringRef};
+use kameo::prelude::Message;
+use kameo::Actor;
 use lightsky::WindowId;
 use objc2_app_kit::{NSApplicationActivationOptions, NSRunningApplication};
 use std::{ffi::c_void, ptr};
@@ -32,11 +34,31 @@ extern "C" {
     fn CFRelease(cf: CFTypeRef);
 }
 
-pub struct FocusManager;
+#[derive(Actor)]
+pub struct FocusManagerActor {
+    app_handle: tauri::AppHandle,
+}
 
-impl FocusManager {
-    pub fn new() -> Self {
-        Self
+pub struct FocusWindow {
+    pub pid: i32,
+    pub window_id: Option<WindowId>,
+}
+
+impl Message<FocusWindow> for FocusManagerActor {
+    type Reply = ();
+
+    async fn handle(
+        &mut self,
+        msg: FocusWindow,
+        _ctx: &mut kameo::prelude::Context<Self, Self::Reply>,
+    ) -> Self::Reply {
+        self.focus(&self.app_handle, msg.pid, msg.window_id);
+    }
+}
+
+impl FocusManagerActor {
+    pub fn new(app_handle: tauri::AppHandle) -> Self {
+        Self { app_handle }
     }
 
     pub fn focus(&self, app: &tauri::AppHandle, pid: i32, window_id: Option<WindowId>) {

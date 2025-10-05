@@ -1,16 +1,39 @@
-mod application_tree;
-mod display;
-mod focus;
 mod mission_control_emu;
 
-use application_tree::{ApplicationTree, SearchParam, SearchResult};
-use display::DisplayManager;
-use focus::FocusManager;
+use crate::application_tree::{ApplicationTreeActor, SearchParam, SearchResult};
+use crate::display::DisplayManagerActor;
+use crate::focus::FocusManagerActor;
+use anyhow::Result;
+use kameo::prelude::Message;
+use kameo::{actor::ActorRef, Actor};
 use lightsky::{DisplayId, Lightsky, SpaceId, WindowId};
 use mission_control_emu::MissionControlEmu;
+use serde::{Deserialize, Serialize};
 use std::thread;
 
-#[derive(Clone, PartialEq, Eq, Hash)]
+#[derive(Actor)]
+pub struct AXActor {
+    ax: AX,
+}
+
+impl AXActor {
+    pub fn new(
+        app: tauri::AppHandle,
+        display_manager_ref: ActorRef<DisplayManagerActor>,
+        focus_manager_ref: ActorRef<FocusManagerActor>,
+        application_tree_ref: ActorRef<ApplicationTreeActor>,
+    ) -> Self {
+        let ax = AX::new(
+            app,
+            display_manager_ref,
+            focus_manager_ref,
+            application_tree_ref,
+        );
+        Self { ax }
+    }
+}
+
+#[derive(Clone, Hash, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DisplaySpace {
     pub display_id: DisplayId,
     pub space_id: SpaceId,
@@ -27,84 +50,103 @@ impl std::fmt::Display for DisplaySpace {
 pub struct AX {
     app: tauri::AppHandle,
     pub lightsky: Lightsky,
-    pub application_tree: ApplicationTree,
-    pub current_display_space: DisplaySpace,
-    display: DisplayManager,
+    pub application_tree_ref: ActorRef<ApplicationTreeActor>,
+    display_manager_ref: ActorRef<DisplayManagerActor>,
     mc: MissionControlEmu,
-    focus: FocusManager,
-}
-
-impl std::fmt::Display for AX {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        writeln!(f, "AX:")?;
-        write!(f, "{}", self.current_display_space)?;
-        write!(f, "{}", self.application_tree)
-    }
+    focus_manager_ref: ActorRef<FocusManagerActor>,
 }
 
 impl AX {
-    pub fn new(app: tauri::AppHandle) -> Self {
-        let display = DisplayManager::new();
-        let mc = MissionControlEmu::new();
-        let focus = FocusManager::new();
-
+    pub fn new(
+        app: tauri::AppHandle,
+        display_manager_ref: ActorRef<DisplayManagerActor>,
+        focus_manager_ref: ActorRef<FocusManagerActor>,
+        application_tree_ref: ActorRef<ApplicationTreeActor>,
+    ) -> Self {
         let lightsky = Lightsky::new().expect("Failed to initialize Lightsky");
-        let application_tree = ApplicationTree::new(&lightsky);
-
-        let current_display = display
-            .active_display_id(&app)
-            .expect("Failed to get active display ID");
-        let current_space = lightsky.current_space();
-
+        let mc = MissionControlEmu::new();
         Self {
             app,
             lightsky,
-            application_tree,
-            current_display_space: DisplaySpace {
-                display_id: current_display,
-                space_id: current_space,
-            },
-            display,
+            application_tree_ref,
+            display_manager_ref,
+            focus_manager_ref,
             mc,
-            focus,
         }
     }
 
-    pub fn refresh(&mut self) {
-        self.application_tree = ApplicationTree::new(&self.lightsky);
-        self.current_display_space = DisplaySpace {
-            display_id: self
-                .display
-                .active_display_id(&self.app)
-                .expect("Failed to get active display ID"),
-            space_id: self.lightsky.current_space(),
-        };
+    pub async fn current_display_space(&self) -> DisplaySpace {
+        let display_id = self
+            .display_manager_ref
+            .ask(crate::display::ActiveDisplayRequest)
+            .await
+            .unwrap()
+            .unwrap_or_else(|| {
+                panic!("Failed to get active display ID");
+            });
+
+        let space_id = self.lightsky.current_space();
+
+        DisplaySpace {
+            display_id,
+            space_id,
+        }
+    }
+
+    pub async fn refresh(&mut self) {
+        self.application_tree_ref
+            .ask(crate::application_tree::RefreshTree)
+            .await;
     }
 
     #[allow(dead_code)]
-    pub fn focus_display(&self, display_id: &DisplayId) -> Option<()> {
-        self.display.focus_display_center(display_id)
+    pub async fn focus_display(&self, display_id: &DisplayId) -> Option<()> {
+        self.display_manager_ref
+            .ask(crate::display::FocusDisplayCenter {
+                display_id: display_id.clone(),
+            })
+            .await
+            .unwrap()
     }
 
-    pub fn focus_space(&self, space_id: SpaceId) -> Option<()> {
+    pub async fn focus_space(&self, space_id: SpaceId) -> Option<()> {
         log::info!("Focusing space_id: {}", space_id);
 
-        let target_display_id = self.application_tree.find_display_from_space(space_id)?;
-        let target_space_index = self.application_tree.find_space_index(space_id)?;
+        let target_display_id = self
+            .application_tree_ref
+            .ask(crate::application_tree::FindDisplayFromSpace { space_id })
+            .await
+            .unwrap()?;
 
-        if target_display_id != self.current_display_space.display_id {
+        let target_space_index = self
+            .application_tree_ref
+            .ask(crate::application_tree::FindSpaceIndex { space_id })
+            .await
+            .unwrap()?;
+
+        let current_display_space = self.current_display_space().await;
+
+        if target_display_id != current_display_space.display_id {
             log::info!(
                 "Switch display: {} -> {}",
-                self.current_display_space.display_id,
+                current_display_space.display_id,
                 target_display_id
             );
-            let _ = self.display.focus_display_center(&target_display_id);
+            let _ = self
+                .display_manager_ref
+                .ask(crate::display::FocusDisplayCenter {
+                    display_id: target_display_id.clone(),
+                });
             thread::sleep(std::time::Duration::from_millis(40));
         }
 
         let current_space_index = self
-            .application_tree
-            .find_space_index(self.current_display_space.space_id)?;
+            .application_tree_ref
+            .ask(crate::application_tree::FindSpaceIndex {
+                space_id: current_display_space.space_id,
+            })
+            .await
+            .unwrap()?;
 
         if target_space_index == current_space_index {
             log::info!("Already on target space");
@@ -137,10 +179,12 @@ impl AX {
         Some(())
     }
 
-    pub fn try_focus_app(&mut self, app_name: &str) {
+    pub async fn try_focus_app(&mut self, app_name: &str) {
         if let Some(res) = self
-            .application_tree
-            .search(SearchParam::ByName(app_name.to_string()))
+            .application_tree_ref
+            .ask(SearchParam::ByName(app_name.to_string()))
+            .await
+            .unwrap()
             .first()
         {
             let SearchResult {
@@ -150,14 +194,21 @@ impl AX {
                 ..
             } = res;
             let _ = self.focus_space(*space_id);
-            self.focus.focus(&self.app, *pid, Some(*window_id));
+            self.focus_manager_ref
+                .ask(crate::focus::FocusWindow {
+                    pid: *pid,
+                    window_id: Some(*window_id),
+                })
+                .await;
         }
     }
 
-    pub fn focus_window(&mut self, window_id: WindowId) {
+    pub async fn focus_window(&mut self, window_id: WindowId) {
         if let Some(res) = self
-            .application_tree
-            .search(SearchParam::ByWindowId(window_id))
+            .application_tree_ref
+            .ask(SearchParam::ByWindowId(window_id))
+            .await
+            .unwrap()
             .first()
             .cloned()
         {
@@ -169,16 +220,97 @@ impl AX {
             } = res;
 
             let _ = self.focus_space(space_id);
-            self.focus.focus(&self.app, pid, Some(window_id));
+            self.focus_manager_ref
+                .ask(crate::focus::FocusWindow {
+                    pid,
+                    window_id: Some(window_id),
+                })
+                .await;
         }
 
         self.refresh();
     }
 
-    pub fn get_focused_window(&self) -> Option<WindowId> {
-        self.application_tree
-            .search(SearchParam::Focused)
+    pub async fn get_focused_window(&self) -> Option<WindowId> {
+        self.application_tree_ref
+            .ask(SearchParam::Focused)
+            .await
+            .unwrap()
             .first()
             .map(|res| res.window_id)
+    }
+}
+
+pub struct GetFocusedWindow;
+
+impl Message<GetFocusedWindow> for AXActor {
+    type Reply = Option<WindowId>;
+
+    async fn handle(
+        &mut self,
+        _msg: GetFocusedWindow,
+        _ctx: &mut kameo::prelude::Context<Self, Self::Reply>,
+    ) -> Self::Reply {
+        self.ax.get_focused_window().await
+    }
+}
+
+pub struct RefreshAX;
+
+impl Message<RefreshAX> for AXActor {
+    type Reply = ();
+
+    async fn handle(
+        &mut self,
+        _msg: RefreshAX,
+        _ctx: &mut kameo::prelude::Context<Self, Self::Reply>,
+    ) -> Self::Reply {
+        self.ax.refresh().await;
+    }
+}
+
+pub struct TryFocusApp {
+    pub app_name: String,
+}
+
+impl Message<TryFocusApp> for AXActor {
+    type Reply = ();
+
+    async fn handle(
+        &mut self,
+        msg: TryFocusApp,
+        _ctx: &mut kameo::prelude::Context<Self, Self::Reply>,
+    ) -> Self::Reply {
+        self.ax.try_focus_app(&msg.app_name).await;
+    }
+}
+
+pub struct FocusWindow {
+    pub window_id: WindowId,
+}
+
+impl Message<FocusWindow> for AXActor {
+    type Reply = ();
+
+    async fn handle(
+        &mut self,
+        msg: FocusWindow,
+        _ctx: &mut kameo::prelude::Context<Self, Self::Reply>,
+    ) -> Self::Reply {
+        self.ax.focus_window(msg.window_id).await;
+    }
+}
+
+pub struct CurrentDisplaySpace;
+
+impl Message<CurrentDisplaySpace> for AXActor {
+    type Reply = Result<DisplaySpace>;
+
+    async fn handle(
+        &mut self,
+        _msg: CurrentDisplaySpace,
+        _ctx: &mut kameo::prelude::Context<Self, Self::Reply>,
+    ) -> Self::Reply {
+        Ok(self.ax.current_display_space().await)
     }
 }
