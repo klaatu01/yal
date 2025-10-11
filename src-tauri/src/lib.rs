@@ -10,6 +10,7 @@ mod config_watcher;
 mod display;
 mod focus;
 mod ns_watcher;
+mod plugin;
 mod router;
 mod window;
 
@@ -169,6 +170,9 @@ pub fn run() {
             window::apply_window_size(app.handle(), &cfg);
 
             tauri::async_runtime::block_on(async {
+                let plugin_manager_actor =
+                    plugin::PluginManagerActor::spawn(plugin::PluginManagerActor::new());
+
                 let cmd_actor =
                     cmd::CommandActor::spawn(cmd::CommandActor::new(app.handle().clone()));
 
@@ -210,6 +214,7 @@ pub fn run() {
                 config_watcher::ConfigWatcher::spawn(event_tx.clone());
                 ns_watcher::SystemWatcher::spawn(event_tx.clone());
 
+                app.manage(plugin_manager_actor);
                 app.manage(cmd_actor);
                 app.manage(application_tree_actor);
                 app.manage(focus_manager_actor);

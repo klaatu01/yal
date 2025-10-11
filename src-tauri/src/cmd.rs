@@ -1,4 +1,4 @@
-use std::thread;
+use std::{collections::HashSet, thread};
 
 use kameo::{
     actor::ActorRef,
@@ -32,6 +32,10 @@ impl Message<Command> for CommandActor {
             Command::App(app_info) => self.run_app_cmd(app_info).await,
             Command::Switch(target) => self.run_switch_cmd(target).await,
             Command::Theme(theme) => self.run_theme_cmd(theme).await,
+            Command::Plugin {
+                plugin_name,
+                command_name,
+            } => self.run_plugin_cmd(plugin_name, command_name).await,
         }
     }
 }
@@ -95,6 +99,58 @@ impl CommandActor {
         Ok(())
     }
 
+    async fn run_plugin_cmd(
+        &self,
+        plugin_name: String,
+        command_name: String,
+    ) -> Result<(), String> {
+        let application_tree_ref = self
+            .app_handle
+            .state::<ActorRef<application_tree::ApplicationTreeActor>>();
+
+        let ax_ref = self.app_handle.state::<ActorRef<AXActor>>();
+        let tree = application_tree_ref
+            .ask(application_tree::SearchParam::All)
+            .await
+            .unwrap_or_default();
+
+        let current_display = ax_ref.ask(ax::CurrentDisplaySpace).await.unwrap();
+
+        let context = yal_plugin::protocol::PluginExecuteContext {
+            windows: tree
+                .into_iter()
+                .map(|res| yal_plugin::protocol::Window {
+                    app_name: res.app_name,
+                    title: res.title,
+                    pid: res.pid,
+                    window_id: res.window_id.0,
+                    display_id: res.display_id.to_string(),
+                    space_id: res.space_id.0,
+                    is_focused: res.is_focused,
+                    space_index: res.space_index,
+                })
+                .collect(),
+            displays: vec![],
+            current_display: yal_plugin::protocol::Display {
+                display_id: current_display.display_id.to_string(),
+                current_space_id: current_display.space_id.0,
+            },
+        };
+
+        let plugin_ref = self
+            .app_handle
+            .state::<ActorRef<crate::plugin::PluginManagerActor>>();
+
+        plugin_ref
+            .ask(crate::plugin::ExecutePluginCommand {
+                plugin_name,
+                command_name,
+                context,
+            })
+            .await;
+        Ok(())
+    }
+
     async fn run_switch_cmd(&self, target: WindowTarget) -> Result<(), String> {
         let ax_ref = self.app_handle.state::<ActorRef<AXActor>>();
         ax_ref
@@ -155,7 +211,24 @@ impl CommandActor {
             .map(Command::Theme)
             .collect::<Vec<Command>>();
 
-        [app_infos, switch_targets, themes].concat()
+        let plugin_ref = self
+            .app_handle
+            .state::<ActorRef<crate::plugin::PluginManagerActor>>();
+
+        let plugin_cmds = plugin_ref
+            .ask(crate::plugin::LoadPlugins)
+            .await
+            .unwrap_or_default()
+            .iter()
+            .flat_map(|p| {
+                p.commands.iter().map(move |c| Command::Plugin {
+                    plugin_name: p.plugin_name.clone(),
+                    command_name: c.clone(),
+                })
+            })
+            .collect::<Vec<Command>>();
+
+        [app_infos, switch_targets, themes, plugin_cmds].concat()
     }
 }
 

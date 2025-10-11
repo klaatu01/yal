@@ -185,6 +185,7 @@ pub fn App() -> impl IntoView {
         Some(CommandKind::App) => "open".to_string(),
         Some(CommandKind::Switch) => "switch".to_string(),
         Some(CommandKind::Theme) => "theme".to_string(),
+        Some(CommandKind::Plugin) => "plugin".to_string(),
         None => String::new(),
     });
 
@@ -260,6 +261,15 @@ pub fn App() -> impl IntoView {
                     *f = match f {
                         Some(CommandKind::Theme) => None,
                         _ => Some(CommandKind::Theme),
+                    }
+                });
+            }
+            "e" if ev.ctrl_key() => {
+                ev.prevent_default();
+                set_filter.update(|f| {
+                    *f = match f {
+                        Some(CommandKind::Plugin) => None,
+                        _ => Some(CommandKind::Plugin),
                     }
                 });
             }

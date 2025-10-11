@@ -50,6 +50,7 @@ notify-debouncer-mini = "0.7.0"
 block2 = "0.6.2"
 tokio = { version = "1.47.1", features = ["time"] }
 objc2-core-foundation = "0.3.2"
+yal-plugin = { path = "../crates/yal-plugin" }
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-autostart = "2"
