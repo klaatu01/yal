@@ -17,6 +17,7 @@ A tiny, no-nonsense app launcher. Press `⌘ Space`, type a few letters, hit `En
 - **Theme filtering & switching**: press `Ctrl‑T` to filter themes by name and apply instantly.
 - **Lightweight**: ~20 MB RAM, instant launch.
 - **Window switching**: list running app windows and jump to them (across Spaces).
+- **Pluggable**: uses the built-in Lua plugin manager to add custom commands to the command palette. see [Plugins](#plugins).
 
 ---
 
@@ -211,6 +212,76 @@ Each **theme** is a `[name]` table with these keys:
 | `padding`     | float  | Inner padding (px).                                                         |
 | `line_height` | float  | Line height multiplier for rows (e.g., `1.2`).                              |
 | `w_radius`    | float  | Corner radius (px).                                                         |
+
+---
+
+## Plugins
+
+YAL supports lightweight **Lua** plugins. Plugins can add commands (e.g. Spotify controls, window actions, notes/Shortcuts automations via `osascript`) that appear in YAL’s command palette.
+
+### Where plugins live
+
+- **Config file:** `~/.config/yal/plugins.toml`  
+- **Install directory:** `~/.local/share/yal/plugins/<plugin-name>/` (git-cloned here)
+
+YAL's built in plugin manager will hot-load plugins from the config file when changes are made (no need to restart YAL).
+
+### Quick start
+
+Create `~/.config/yal/plugins.toml`:
+
+Yal uses the format `<plugin-name> = "<github-user>/<repo>"` to clone from GitHub.
+
+```toml
+[plugins]
+spotify = "klaatu01/yal-plugin-spotify"
+examples = "klaatu01/yal-plugin-examples"
+```
+
+### Writing a plugin (Lua)
+
+Each plugin is a folder with an `init.lua` that returns a table exposing two functions:
+
+- `init()` → returns a JSON-serializable table describing the plugin and its commands
+- `execute(req)` → runs a named command
+
+**Minimal skeleton:**
+
+```lua
+-- ~/.local/share/yal/plugins/my-plugin/init.lua
+local M = {}
+
+function M.init()
+  return {
+    name = "my-plugin",
+    description = "My first YAL plugin",
+    version = "0.1.0",
+    author = "Me",
+    commands = {
+      { name = "hello", description = "Say hello in the console" },
+    },
+  }
+end
+
+-- req: { command: string, context: PluginExecuteContext }
+function M.execute(req)
+  if req.command == "hello" then
+    print("Hello from my-plugin!")
+    return { hide = true }   -- tell YAL to hide after success
+  end
+  return { hide = false }    -- unknown command → keep UI open
+end
+
+return M
+```
+
+**Command visibility:** return `{ hide = true }` when your command succeeds and YAL should dismiss; `{ hide = false }` to keep the UI up (e.g., when nothing happened or you want to show an error result in the UI).
+
+A proper guide is on its way.
+
+### Example plugins
+
+- [yal-plugin-spotify](https://github.com/klaatu01/yal-plugin-spotify) — control Spotify playback
 
 ---
 
