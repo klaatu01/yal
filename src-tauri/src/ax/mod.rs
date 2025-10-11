@@ -94,7 +94,8 @@ impl AX {
     }
 
     pub async fn refresh(&mut self) {
-        self.application_tree_ref
+        let _ = self
+            .application_tree_ref
             .ask(crate::application_tree::RefreshTree)
             .await;
     }
@@ -110,8 +111,6 @@ impl AX {
     }
 
     pub async fn focus_space(&self, space_id: SpaceId) -> Option<()> {
-        log::info!("Focusing space_id: {}", space_id);
-
         let target_display_id = self
             .application_tree_ref
             .ask(crate::application_tree::FindDisplayFromSpace { space_id })
@@ -180,6 +179,7 @@ impl AX {
     }
 
     pub async fn try_focus_app(&mut self, app_name: &str) {
+        log::info!("Trying to focus app: {}", app_name);
         if let Some(res) = self
             .application_tree_ref
             .ask(SearchParam::ByName(app_name.to_string()))
@@ -193,8 +193,9 @@ impl AX {
                 space_id,
                 ..
             } = res;
-            let _ = self.focus_space(*space_id);
-            self.focus_manager_ref
+            let _ = self.focus_space(*space_id).await;
+            let _ = self
+                .focus_manager_ref
                 .ask(crate::focus::FocusWindow {
                     pid: *pid,
                     window_id: Some(*window_id),
@@ -204,6 +205,7 @@ impl AX {
     }
 
     pub async fn focus_window(&mut self, window_id: WindowId) {
+        log::info!("Focusing window_id: {}", window_id);
         if let Some(res) = self
             .application_tree_ref
             .ask(SearchParam::ByWindowId(window_id))
@@ -216,11 +218,22 @@ impl AX {
                 pid,
                 window_id,
                 space_id,
+                title,
+                app_name,
                 ..
             } = res;
 
-            let _ = self.focus_space(space_id);
-            self.focus_manager_ref
+            log::info!(
+                "Focusing window: pid={}, window_id={}, space_id={}, app_name={}, title={:?}",
+                pid,
+                window_id,
+                space_id,
+                app_name,
+                title
+            );
+            let _ = self.focus_space(space_id).await;
+            let _ = self
+                .focus_manager_ref
                 .ask(crate::focus::FocusWindow {
                     pid,
                     window_id: Some(window_id),
@@ -228,30 +241,7 @@ impl AX {
                 .await;
         }
 
-        self.refresh();
-    }
-
-    pub async fn get_focused_window(&self) -> Option<WindowId> {
-        self.application_tree_ref
-            .ask(SearchParam::Focused)
-            .await
-            .unwrap()
-            .first()
-            .map(|res| res.window_id)
-    }
-}
-
-pub struct GetFocusedWindow;
-
-impl Message<GetFocusedWindow> for AXActor {
-    type Reply = Option<WindowId>;
-
-    async fn handle(
-        &mut self,
-        _msg: GetFocusedWindow,
-        _ctx: &mut kameo::prelude::Context<Self, Self::Reply>,
-    ) -> Self::Reply {
-        self.ax.get_focused_window().await
+        self.refresh().await;
     }
 }
 

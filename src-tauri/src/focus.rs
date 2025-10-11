@@ -1,7 +1,12 @@
 use core_foundation::array::CFArrayRef;
 use core_foundation::base::{CFTypeRef, TCFType};
 use core_foundation::number::CFNumber;
+use core_foundation::number::CFNumberRef;
 use core_foundation::string::{CFString, CFStringRef};
+use core_graphics::display::CFDictionaryRef;
+use core_graphics::window::{
+    kCGNullWindowID, kCGWindowListOptionOnScreenOnly, CGWindowListCopyWindowInfo,
+};
 use kameo::prelude::Message;
 use kameo::Actor;
 use lightsky::WindowId;
@@ -15,6 +20,7 @@ type AXUIElementRef = *mut __AXUIElement;
 #[link(name = "ApplicationServices", kind = "framework")]
 extern "C" {
     fn AXUIElementCreateApplication(pid: i32) -> AXUIElementRef;
+    fn AXUIElementCreateSystemWide() -> AXUIElementRef; // ← add this
     fn AXUIElementCopyAttributeValue(
         element: AXUIElementRef,
         attribute: CFStringRef,
@@ -37,6 +43,7 @@ extern "C" {
 #[derive(Actor)]
 pub struct FocusManagerActor {
     app_handle: tauri::AppHandle,
+    focus_window_id: Option<WindowId>,
 }
 
 pub struct FocusWindow {
@@ -52,13 +59,99 @@ impl Message<FocusWindow> for FocusManagerActor {
         msg: FocusWindow,
         _ctx: &mut kameo::prelude::Context<Self, Self::Reply>,
     ) -> Self::Reply {
+        self.focus_window_id = msg.window_id;
         self.focus(&self.app_handle, msg.pid, msg.window_id);
+    }
+}
+
+pub struct SetFocusWindowId {
+    pub window_id: Option<WindowId>,
+}
+
+impl Message<SetFocusWindowId> for FocusManagerActor {
+    type Reply = ();
+
+    async fn handle(
+        &mut self,
+        msg: SetFocusWindowId,
+        _ctx: &mut kameo::prelude::Context<Self, Self::Reply>,
+    ) -> Self::Reply {
+        self.focus_window_id = msg.window_id;
+    }
+}
+
+pub struct GetFocusWindowId;
+
+impl Message<GetFocusWindowId> for FocusManagerActor {
+    type Reply = Option<WindowId>;
+
+    async fn handle(
+        &mut self,
+        _msg: GetFocusWindowId,
+        _ctx: &mut kameo::prelude::Context<Self, Self::Reply>,
+    ) -> Self::Reply {
+        log::info!("Getting focus window id: {:?}", self.focus_window_id);
+        self.focus_window_id
+    }
+}
+
+pub struct InitFocus;
+
+impl Message<InitFocus> for FocusManagerActor {
+    type Reply = Option<WindowId>;
+
+    async fn handle(
+        &mut self,
+        _msg: InitFocus,
+        _ctx: &mut kameo::prelude::Context<Self, Self::Reply>,
+    ) -> Self::Reply {
+        if let Some(win) = self.focused_window_id() {
+            log::info!("Initial focused window: {:?}", win);
+            self.focus_window_id = Some(win);
+            Some(win)
+        } else {
+            log::info!("No focused window found");
+            None
+        }
     }
 }
 
 impl FocusManagerActor {
     pub fn new(app_handle: tauri::AppHandle) -> Self {
-        Self { app_handle }
+        Self {
+            app_handle,
+            focus_window_id: None,
+        }
+    }
+
+    pub fn focused_window_id(&self) -> Option<WindowId> {
+        unsafe {
+            let info = CGWindowListCopyWindowInfo(kCGWindowListOptionOnScreenOnly, kCGNullWindowID);
+            if info.is_null() {
+                return None;
+            }
+
+            let count = CFArrayGetCount(info);
+            if count <= 0 {
+                return None;
+            }
+
+            let dict_ref = CFArrayGetValueAtIndex(info, 0) as CFDictionaryRef;
+
+            if dict_ref.is_null() {
+                return None;
+            }
+
+            let key = CFString::from_static_string("kCGWindowNumber");
+            let value: CFTypeRef =
+                *core_foundation::dictionary::CFDictionary::wrap_under_get_rule(dict_ref)
+                    .find(&key)?;
+
+            let num_ref: CFNumberRef = value as CFNumberRef;
+            let num = core_foundation::number::CFNumber::wrap_under_get_rule(num_ref);
+
+            num.to_i64().map(|n| WindowId(n as u32))
+        }
     }
 
     pub fn focus(&self, app: &tauri::AppHandle, pid: i32, window_id: Option<WindowId>) {

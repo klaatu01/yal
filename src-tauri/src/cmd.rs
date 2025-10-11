@@ -98,7 +98,7 @@ impl CommandActor {
     async fn run_switch_cmd(&self, target: WindowTarget) -> Result<(), String> {
         let ax_ref = self.app_handle.state::<ActorRef<AXActor>>();
         ax_ref
-            .tell(ax::FocusWindow {
+            .ask(ax::FocusWindow {
                 window_id: WindowId(target.window_id),
             })
             .await
