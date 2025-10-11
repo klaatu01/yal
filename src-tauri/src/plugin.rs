@@ -13,6 +13,24 @@ impl PluginManagerActor {
     }
 }
 
+pub struct InstallPlugins;
+
+impl Message<InstallPlugins> for PluginManagerActor {
+    type Reply = Result<(), String>;
+
+    async fn handle(
+        &mut self,
+        _msg: InstallPlugins,
+        _ctx: &mut kameo::prelude::Context<Self, Self::Reply>,
+    ) -> Self::Reply {
+        log::info!("Installing plugins...");
+        match self.manager.install().await {
+            Ok(_) => Ok(()),
+            Err(e) => Err(format!("Failed to install plugins: {}", e)),
+        }
+    }
+}
+
 pub struct LoadPlugins;
 
 pub struct PluginCommand {

@@ -2,8 +2,6 @@ use anyhow::{Context, Result, bail};
 use mlua::prelude::LuaSerdeExt;
 use mlua::{Function, Lua, Table, Value as LuaValue};
 use std::path::PathBuf;
-use std::sync::Arc;
-use tokio::sync::Mutex;
 
 use crate::protocol::{
     PluginExecuteContext, PluginExecuteRequest, PluginExecuteResponse, PluginInitResponse,
