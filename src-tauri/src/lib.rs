@@ -1,5 +1,5 @@
 use kameo::{actor::ActorRef, Actor};
-use tauri::{ActivationPolicy, Emitter, Manager, WindowEvent};
+use tauri::{ActivationPolicy, Manager, WindowEvent};
 
 mod application_tree;
 mod ax;
@@ -115,14 +115,14 @@ pub fn run() {
                 .with_shortcut("cmd+space")
                 .unwrap()
                 .with_handler(|app, _shortcut, event| {
+                    let focus_manager = app.state::<ActorRef<focus::FocusManagerActor>>();
                     if event.state() == tauri_plugin_global_shortcut::ShortcutState::Pressed {
                         if let Some(win) = app.get_webview_window("main") {
                             if win.is_visible().unwrap_or(false) {
                                 hide_palette_window(app);
                             } else {
                                 tauri::async_runtime::block_on(async {
-                                    // let ax_handle = app.state::<ActorRef<AXActor>>();
-                                    // ax_handle.tell(crate::ax::RefreshAX).await.unwrap();
+                                    let _ = focus_manager.ask(focus::InitFocus).await;
                                     publish_cmd_list(app).await;
                                     reveal_palette(app).await;
                                 });
@@ -137,8 +137,10 @@ pub fn run() {
             WindowEvent::Focused(false) => {
                 let handle = win.app_handle();
                 let ax_ref = handle.state::<ActorRef<AXActor>>();
+                let focus_manager = handle.state::<ActorRef<focus::FocusManagerActor>>();
                 tauri::async_runtime::block_on(async {
-                    let focused = ax_ref.ask(crate::ax::GetFocusedWindow).await.unwrap();
+                    let focused = focus_manager.ask(focus::GetFocusWindowId).await.unwrap();
+                    log::info!("Restoring focus to window: {:?}", focused);
                     if let Some(focus) = focused {
                         ax_ref
                             .tell(crate::ax::FocusWindow { window_id: focus })
