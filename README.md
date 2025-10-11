@@ -234,8 +234,7 @@ Yal uses the format `<plugin-name> = "<github-user>/<repo>"` to clone from GitHu
 
 ```toml
 [plugins]
-spotify = "klaatu01/yal-plugin-spotify"
-examples = "klaatu01/yal-plugin-examples"
+spotify = "klaatu01/yal-spotify-plugin"
 ```
 
 ### Writing a plugin (Lua)
@@ -281,7 +280,7 @@ A proper guide is on its way.
 
 ### Example plugins
 
-- [yal-plugin-spotify](https://github.com/klaatu01/yal-plugin-spotify) — control Spotify playback
+- [yal-spotify-plugin](https://github.com/klaatu01/yal-spotify-plugin) — control Spotify playback
 
 ---
 
