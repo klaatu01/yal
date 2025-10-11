@@ -4,9 +4,13 @@ use tauri::{ActivationPolicy, Emitter, Manager, WindowEvent};
 mod application_tree;
 mod ax;
 mod cmd;
+mod common;
 mod config;
+mod config_watcher;
 mod display;
 mod focus;
+mod ns_watcher;
+mod router;
 mod window;
 
 use crate::{
@@ -92,77 +96,6 @@ async fn current_cfg_or_default(app: &tauri::AppHandle) -> AppConfig {
     cfg_ref.ask(config::GetConfig).await.unwrap_or_default()
 }
 
-fn spawn_config_watcher(
-    app: &tauri::AppHandle,
-    config_actor_ref: ActorRef<config::ConfigActor>,
-    theme_manager_ref: ActorRef<ThemeManagerActor>,
-) {
-    use notify::{RecursiveMode, Watcher};
-    use std::{sync::mpsc, time::Duration};
-
-    let app_handle = app.clone();
-    let cfg_path = config::config_path();
-    let watch_dir = cfg_path
-        .parent()
-        .map(|p| p.to_path_buf())
-        .unwrap_or_else(|| std::env::current_dir().unwrap());
-
-    std::thread::spawn(move || {
-        let (tx, rx) = mpsc::channel();
-
-        let mut watcher =
-            notify::recommended_watcher(move |res: Result<notify::Event, notify::Error>| {
-                let _ = tx.send(res);
-            })
-            .expect("failed to create file watcher");
-
-        watcher
-            .watch(&watch_dir, RecursiveMode::NonRecursive)
-            .expect("failed to watch config directory");
-
-        let mut last_reload = std::time::Instant::now();
-
-        while let Ok(res) = rx.recv() {
-            match res {
-                Ok(event) => {
-                    let relevant = event.paths.iter().any(|p| p == &cfg_path);
-                    if !relevant {
-                        continue;
-                    }
-
-                    if last_reload.elapsed() < Duration::from_millis(120) {
-                        continue;
-                    }
-                    last_reload = std::time::Instant::now();
-                    std::thread::sleep(Duration::from_millis(50));
-
-                    tauri::async_runtime::block_on(async {
-                        config_actor_ref.tell(config::ReloadConfig).await.unwrap();
-
-                        let new_cfg = config_actor_ref.ask(config::GetConfig).await.unwrap();
-
-                        if let Some(theme_name) = &new_cfg.theme {
-                            theme_manager_ref
-                                .tell(theme::ApplyTheme {
-                                    theme_name: theme_name.clone(),
-                                })
-                                .await
-                                .unwrap();
-                        }
-
-                        window::apply_window_size(&app_handle, &new_cfg);
-
-                        window::position_main_window_on_mouse_display(&app_handle, &new_cfg);
-
-                        let _ = app_handle.emit("config://updated", new_cfg);
-                    });
-                }
-                Err(err) => eprintln!("watch error: {err:?}"),
-            }
-        }
-    });
-}
-
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_macos_permissions::init())
@@ -188,8 +121,8 @@ pub fn run() {
                                 hide_palette_window(app);
                             } else {
                                 tauri::async_runtime::block_on(async {
-                                    let ax_handle = app.state::<ActorRef<AXActor>>();
-                                    ax_handle.tell(crate::ax::RefreshAX).await.unwrap();
+                                    // let ax_handle = app.state::<ActorRef<AXActor>>();
+                                    // ax_handle.tell(crate::ax::RefreshAX).await.unwrap();
                                     publish_cmd_list(app).await;
                                     reveal_palette(app).await;
                                 });
@@ -255,6 +188,7 @@ pub fn run() {
                     focus_manager_actor.clone(),
                     application_tree_actor.clone(),
                 ));
+                ax_actor.tell(crate::ax::RefreshAX).await.unwrap();
 
                 let config_actor = config::ConfigActor::spawn(config::ConfigActor::new());
 
@@ -262,11 +196,17 @@ pub fn run() {
                     theme::ThemeManagerActor::new(app.handle().clone()),
                 );
 
-                spawn_config_watcher(
-                    &app.handle().clone(),
+                let event_router = router::EventRouter::new(
+                    app.handle().clone(),
                     config_actor.clone(),
                     theme_manager_actor.clone(),
+                    application_tree_actor.clone(),
                 );
+
+                let event_tx = event_router.spawn();
+
+                config_watcher::ConfigWatcher::spawn(event_tx.clone());
+                ns_watcher::SystemWatcher::spawn(event_tx.clone());
 
                 app.manage(cmd_actor);
                 app.manage(application_tree_actor);

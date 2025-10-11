@@ -193,8 +193,9 @@ impl AX {
                 space_id,
                 ..
             } = res;
-            let _ = self.focus_space(*space_id);
-            self.focus_manager_ref
+            let _ = self.focus_space(*space_id).await;
+            let _ = self
+                .focus_manager_ref
                 .ask(crate::focus::FocusWindow {
                     pid: *pid,
                     window_id: Some(*window_id),
@@ -219,8 +220,9 @@ impl AX {
                 ..
             } = res;
 
-            let _ = self.focus_space(space_id);
-            self.focus_manager_ref
+            let _ = self.focus_space(space_id).await;
+            let _ = self
+                .focus_manager_ref
                 .ask(crate::focus::FocusWindow {
                     pid,
                     window_id: Some(window_id),
@@ -228,7 +230,7 @@ impl AX {
                 .await;
         }
 
-        self.refresh();
+        // self.refresh();
     }
 
     pub async fn get_focused_window(&self) -> Option<WindowId> {

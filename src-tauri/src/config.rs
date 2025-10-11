@@ -47,7 +47,7 @@ impl Message<GetConfig> for ConfigActor {
     }
 }
 
-fn config_base_path() -> PathBuf {
+pub fn config_base_path() -> PathBuf {
     let base = std::env::var_os("XDG_CONFIG_HOME")
         .map(PathBuf::from)
         .or_else(|| {
