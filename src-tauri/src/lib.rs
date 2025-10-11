@@ -10,6 +10,7 @@ mod config_watcher;
 mod display;
 mod focus;
 mod ns_watcher;
+mod plugin;
 mod router;
 mod window;
 
@@ -169,6 +170,14 @@ pub fn run() {
             window::apply_window_size(app.handle(), &cfg);
 
             tauri::async_runtime::block_on(async {
+                let plugin_manager_actor =
+                    plugin::PluginManagerActor::spawn(plugin::PluginManagerActor::new());
+
+                plugin_manager_actor
+                    .ask(plugin::InstallPlugins)
+                    .await
+                    .unwrap();
+
                 let cmd_actor =
                     cmd::CommandActor::spawn(cmd::CommandActor::new(app.handle().clone()));
 
@@ -203,13 +212,29 @@ pub fn run() {
                     config_actor.clone(),
                     theme_manager_actor.clone(),
                     application_tree_actor.clone(),
+                    plugin_manager_actor.clone(),
                 );
 
                 let event_tx = event_router.spawn();
 
-                config_watcher::ConfigWatcher::spawn(event_tx.clone());
+                config_watcher::ConfigWatcher::spawn(
+                    event_tx.clone(),
+                    "config.toml",
+                    common::Events::ReloadConfig,
+                );
+                config_watcher::ConfigWatcher::spawn(
+                    event_tx.clone(),
+                    "plugins.toml",
+                    common::Events::ReloadPlugins,
+                );
+                config_watcher::ConfigWatcher::spawn(
+                    event_tx.clone(),
+                    "themes.toml",
+                    common::Events::RefreshTree,
+                );
                 ns_watcher::SystemWatcher::spawn(event_tx.clone());
 
+                app.manage(plugin_manager_actor);
                 app.manage(cmd_actor);
                 app.manage(application_tree_actor);
                 app.manage(focus_manager_actor);

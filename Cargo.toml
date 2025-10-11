@@ -16,4 +16,4 @@ yal-core = { path = "./crates/yal-core" }
 fuzzy-matcher = "0.3.7"
 
 [workspace]
-members = ["src-tauri","crates/yal-core", "crates/lightsky-sys", "crates/lightsky", "crates/yal-theme", "crates/yal-watcher"]
+members = ["src-tauri","crates/yal-core", "crates/lightsky-sys", "crates/lightsky", "crates/yal-theme", "crates/yal-watcher", "crates/yal-plugin" ]

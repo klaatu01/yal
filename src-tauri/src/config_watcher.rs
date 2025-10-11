@@ -7,16 +7,25 @@ use notify_debouncer_mini::{
     new_debouncer, DebounceEventResult, DebouncedEvent, DebouncedEventKind,
 };
 
-const FILES_TO_WATCH: &[&str] = &["config.toml", "themes.toml"];
-
 pub struct ConfigWatcher {
     event_tx: futures::channel::mpsc::UnboundedSender<crate::common::Events>,
+    file: String,
+    event: crate::common::Events,
 }
 
 impl ConfigWatcher {
-    pub fn spawn(event_tx: futures::channel::mpsc::UnboundedSender<crate::common::Events>) {
+    pub fn spawn(
+        event_tx: futures::channel::mpsc::UnboundedSender<crate::common::Events>,
+        file: impl Into<String>,
+        event: crate::common::Events,
+    ) {
+        let file = file.into();
         tauri::async_runtime::spawn(async move {
-            let watcher = Self { event_tx };
+            let watcher = Self {
+                event_tx,
+                file,
+                event,
+            };
             if let Err(e) = watcher.run().await {
                 log::error!("ConfigWatcher error: {:?}", e);
             }
@@ -47,7 +56,8 @@ impl ConfigWatcher {
 
         while let Some(event) = rx.next().await {
             if self.is_relevant(&event) {
-                let _ = self.request_reload().await;
+                log::info!("Change detected in {}", self.file);
+                let _ = self.send_event().await;
             }
         }
 
@@ -55,16 +65,15 @@ impl ConfigWatcher {
     }
 
     fn is_relevant(&self, event: &DebouncedEvent) -> bool {
-        event.path == crate::config::config_path()
-            && event
-                .path
-                .file_name()
-                .is_some_and(|n| FILES_TO_WATCH.contains(&n.to_str().unwrap_or_default()))
+        event.path.file_name().is_some_and(|n| {
+            log::debug!("Checking file: {:?}", n);
+            n.to_string_lossy() == self.file
+        })
     }
 
-    async fn request_reload(&mut self) -> Result<(), String> {
+    async fn send_event(&mut self) -> Result<(), String> {
         self.event_tx
-            .send(crate::common::Events::ReloadConfig)
+            .send(self.event.clone())
             .await
             .map_err(|e| format!("Failed to send reload event: {}", e))
     }

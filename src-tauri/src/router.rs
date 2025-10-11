@@ -14,6 +14,7 @@ pub struct EventRouter {
     config_ref: ActorRef<ConfigActor>,
     theme_ref: ActorRef<ThemeManagerActor>,
     application_tree_ref: ActorRef<crate::application_tree::ApplicationTreeActor>,
+    plugin_manager_ref: ActorRef<crate::plugin::PluginManagerActor>,
 }
 
 impl EventRouter {
@@ -22,12 +23,14 @@ impl EventRouter {
         config_ref: ActorRef<ConfigActor>,
         theme_ref: ActorRef<ThemeManagerActor>,
         application_tree_ref: ActorRef<ApplicationTreeActor>,
+        plugin_manager_ref: ActorRef<crate::plugin::PluginManagerActor>,
     ) -> Self {
         Self {
             app_handle,
             config_ref,
             theme_ref,
             application_tree_ref,
+            plugin_manager_ref,
         }
     }
 
@@ -63,6 +66,13 @@ impl EventRouter {
                         let _ = self
                             .application_tree_ref
                             .tell(crate::application_tree::RefreshTree)
+                            .await;
+                    }
+                    Events::ReloadPlugins => {
+                        log::info!("EventRouter: ReloadPlugins event received");
+                        let _ = self
+                            .plugin_manager_ref
+                            .ask(crate::plugin::InstallPlugins)
                             .await;
                     }
                 }
