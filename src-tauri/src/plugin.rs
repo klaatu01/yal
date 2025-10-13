@@ -1,5 +1,8 @@
 use kameo::{prelude::Message, Actor};
-use yal_plugin::PluginManager;
+use yal_plugin::{
+    protocol::{PluginExecuteContext, PluginExecuteResponse},
+    PluginManager,
+};
 
 #[derive(Actor)]
 pub struct PluginManagerActor {
@@ -66,11 +69,11 @@ impl Message<LoadPlugins> for PluginManagerActor {
 pub struct ExecutePluginCommand {
     pub plugin_name: String,
     pub command_name: String,
-    pub context: yal_plugin::protocol::PluginExecuteContext,
+    pub args: Option<serde_json::Value>,
 }
 
 impl Message<ExecutePluginCommand> for PluginManagerActor {
-    type Reply = Result<(), String>;
+    type Reply = Result<PluginExecuteResponse, String>;
 
     async fn handle(
         &mut self,
@@ -84,14 +87,26 @@ impl Message<ExecutePluginCommand> for PluginManagerActor {
         );
         match self
             .manager
-            .run_command(&msg.plugin_name, &msg.command_name, msg.context)
+            .run_command(&msg.plugin_name, &msg.command_name, msg.args)
             .await
         {
-            Ok(_) => Ok(()),
+            Ok(res) => Ok(res),
             Err(e) => Err(format!(
                 "Failed to execute command '{}::{}': {}",
                 msg.plugin_name, msg.command_name, e
             )),
         }
+    }
+}
+
+impl Message<PluginExecuteContext> for PluginManagerActor {
+    type Reply = ();
+
+    async fn handle(
+        &mut self,
+        msg: PluginExecuteContext,
+        _ctx: &mut kameo::prelude::Context<Self, Self::Reply>,
+    ) -> Self::Reply {
+        self.manager.set_execution_context(msg);
     }
 }

@@ -6953,6 +6953,7 @@ version = "0.0.0"
 dependencies = [
  "anyhow",
  "serde",
+ "serde_json",
  "toml 0.9.8",
 ]
 
@@ -6987,10 +6988,13 @@ dependencies = [
  "fuzzy-matcher",
  "js-sys",
  "leptos",
+ "log",
  "serde",
  "serde-wasm-bindgen",
+ "serde_json",
  "wasm-bindgen",
  "wasm-bindgen-futures",
+ "web-sys",
  "yal-core",
 ]
 

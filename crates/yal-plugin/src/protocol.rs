@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use yal_core::Popup;
 
 #[derive(Serialize, Deserialize)]
 pub struct PluginCommand {
@@ -23,12 +24,15 @@ pub struct PluginInitResponse {
 #[derive(Serialize, Deserialize)]
 pub struct PluginExecuteResponse {
     pub hide: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub popup: Option<Popup>,
 }
 
 #[derive(Serialize)]
 pub struct PluginExecuteRequest<'a> {
     pub command: String,
     pub context: &'a PluginExecuteContext,
+    pub args: Option<serde_json::Value>,
 }
 
 #[derive(Serialize, Deserialize)]

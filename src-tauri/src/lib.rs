@@ -1,5 +1,5 @@
 use kameo::{actor::ActorRef, Actor};
-use tauri::{ActivationPolicy, Manager, WindowEvent};
+use tauri::{ActivationPolicy, Manager, WebviewEvent, WindowEvent};
 
 mod application_tree;
 mod ax;
@@ -213,6 +213,7 @@ pub fn run() {
                     theme_manager_actor.clone(),
                     application_tree_actor.clone(),
                     plugin_manager_actor.clone(),
+                    ax_actor.clone(),
                 );
 
                 let event_tx = event_router.spawn();

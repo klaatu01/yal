@@ -4,7 +4,11 @@ use anyhow::{Context, Result};
 use git2::Repository;
 use tokio::fs;
 
-use crate::{manager::config::PluginConfig, plugin::Plugin, protocol::PluginExecuteContext};
+use crate::{
+    manager::config::PluginConfig,
+    plugin::Plugin,
+    protocol::{PluginExecuteContext, PluginExecuteResponse},
+};
 
 mod config;
 
@@ -23,6 +27,7 @@ pub fn plugins_dir() -> PathBuf {
 pub struct PluginManager {
     pub config: PluginConfig,
     pub plugins: Vec<Plugin>,
+    pub execution_context: Option<PluginExecuteContext>,
 }
 
 impl PluginManager {
@@ -30,6 +35,7 @@ impl PluginManager {
         Self {
             config: PluginConfig::default(),
             plugins: Vec::new(),
+            execution_context: None,
         }
     }
 
@@ -116,29 +122,46 @@ impl PluginManager {
         &self,
         plugin_name: &str,
         command_name: &str,
-        context: PluginExecuteContext,
-    ) -> Result<()> {
+        args: Option<serde_json::Value>,
+    ) -> Result<PluginExecuteResponse> {
         let plugin = self
             .plugins
             .iter()
             .find(|p| p.name == plugin_name)
-            .ok_or_else(|| anyhow::anyhow!("Plugin '{}' not found", plugin_name))
-            .with_context(|| format!("Failed to find plugin '{}'", plugin_name))?;
-        if !plugin.commands.contains(&command_name.to_string()) {
+            .with_context(|| format!("Plugin '{}' not found", plugin_name))?;
+
+        if !plugin.commands.iter().any(|c| c == command_name) {
             return Err(anyhow::anyhow!(
                 "Command '{}' not found in plugin '{}'",
                 command_name,
                 plugin_name
-            ))
-            .with_context(|| {
-                format!(
-                    "Failed to find command '{}' in plugin '{}'",
-                    command_name, plugin_name
-                )
-            });
+            ));
         }
-        let _ = plugin.lua.run(command_name.to_string(), &context).await?;
-        Ok(())
+
+        if let Some(ctx) = &self.execution_context {
+            log::info!(
+                "Executing command '{}' of plugin '{}'",
+                command_name,
+                plugin_name,
+            );
+            let resp = plugin.lua.run(command_name.to_string(), ctx, args).await?;
+
+            Ok(resp)
+        } else {
+            log::info!(
+                "Executing command '{}' of plugin '{}' with no context",
+                command_name,
+                plugin_name
+            );
+            Err(anyhow::anyhow!(
+                "No execution context set for plugin command"
+            ))
+        }
+    }
+
+    pub fn set_execution_context(&mut self, context: PluginExecuteContext) {
+        log::info!("Setting execution context");
+        self.execution_context = Some(context);
     }
 
     pub async fn commands(&self) -> Vec<(String, Vec<String>)> {
