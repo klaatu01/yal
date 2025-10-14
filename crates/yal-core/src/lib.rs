@@ -282,8 +282,6 @@ pub enum Action {
         #[serde(default)]
         presentation: Presentation, // default: ReplacePopup
     },
-
-    // Optional extra actions if you want:
     OpenUrl {
         url: String,
         in_app: Option<bool>,

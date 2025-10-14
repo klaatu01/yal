@@ -7,7 +7,7 @@ pub struct PluginConfigEntry {
     /// Human/plugin key (the key under [plugins] if present), or fallback
     pub name: String,
     /// Full git URL (e.g. https://github.com/owner/repo.git) or shorthand "owner/repo"
-    pub github_url: String,
+    pub git: String,
     /// Free-form plugin config handed to the plugin
     pub config: Option<serde_json::Value>,
 }
@@ -51,7 +51,7 @@ pub fn parse_plugins_toml(toml_str: &str) -> Result<PluginConfig> {
         let entry = match val {
             RawPlugin::Shorthand(s) => PluginConfigEntry {
                 name: key.clone(),
-                github_url: normalize_github_url(&s)?,
+                git: normalize_github_url(&s)?,
                 config: None,
             },
             RawPlugin::Table {
@@ -68,7 +68,7 @@ pub fn parse_plugins_toml(toml_str: &str) -> Result<PluginConfig> {
 
                 PluginConfigEntry {
                     name: name.unwrap_or_else(|| key.clone()),
-                    github_url: normalize_github_url(&gh)?,
+                    git: normalize_github_url(&gh)?,
                     config,
                 }
             }

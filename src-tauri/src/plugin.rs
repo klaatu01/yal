@@ -1,6 +1,7 @@
 use kameo::{prelude::Message, Actor};
 use yal_plugin::{
-    protocol::{PluginExecuteContext, PluginExecuteResponse},
+    plugin::PluginManifest,
+    protocol::{PluginCommand, PluginExecuteContext, PluginExecuteResponse},
     PluginManager,
 };
 
@@ -36,13 +37,8 @@ impl Message<InstallPlugins> for PluginManagerActor {
 
 pub struct LoadPlugins;
 
-pub struct PluginCommand {
-    pub plugin_name: String,
-    pub commands: Vec<String>,
-}
-
 impl Message<LoadPlugins> for PluginManagerActor {
-    type Reply = Vec<PluginCommand>;
+    type Reply = Vec<PluginManifest>;
 
     async fn handle(
         &mut self,
@@ -54,15 +50,7 @@ impl Message<LoadPlugins> for PluginManagerActor {
         log::info!("Plugin config loaded: {:#?}", self.manager.config);
         self.manager.load_plugins().await.unwrap();
         log::info!("Plugins loaded: {}", self.manager.plugins.len());
-        self.manager
-            .commands()
-            .await
-            .iter()
-            .map(|c| PluginCommand {
-                plugin_name: c.0.clone(),
-                commands: c.1.clone(),
-            })
-            .collect()
+        self.manager.commands().await
     }
 }
 

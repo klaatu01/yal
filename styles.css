@@ -199,6 +199,7 @@ body {
 
 .yal-text {
   color: var(--text);
+  padding: calc(var(--pad) * 0.5);
 }
 
 .yal-text.muted {
@@ -278,7 +279,7 @@ body {
   background: transparent;
   border: 1px solid var(--bg);
   outline: none;
-  padding: 4px 6px;
+  padding: calc(var(--pad) * 0.5);
   border-radius: var(--radius);
   caret-color: var(--hl);
 }
@@ -286,6 +287,7 @@ body {
 
 .yal-input::placeholder,
 .yal-textarea::placeholder {
+  padding: calc(var(--pad) * 0.5);
   color: #777;
 }
 
@@ -293,6 +295,7 @@ body {
 .yal-textarea:focus,
 .yal-select:focus,
 .yal-slider:focus {
+  padding: 4px 6px;
   border-color: var(--hl);
   box-shadow: 0 0 0 1px var(--hl);
 }
@@ -305,18 +308,20 @@ body {
 /* Range slider minimal styling */
 .yal-slider {
   -webkit-appearance: none;
-  height: 4px;
+  height: calc(var(--lh) * 0.25);
   background: #111;
   border: none;
+  padding: calc(var(--pad) * 0.5);
 }
 
 .yal-slider::-webkit-slider-thumb {
   -webkit-appearance: none;
   width: 10px;
-  height: 10px;
+  height: calc(var(--lh) * 0.15);
   border-radius: 50%;
   background: var(--hl);
   border: 1px solid var(--hl-text);
+  padding: calc(var(--pad) * 0.5);
 }
 
 /* --- Buttons that match highlight --------------------------------------- */
@@ -369,6 +374,7 @@ body {
 }
 
 .yal-slider {
+  padding: calc(var(--pad) * 0.5);
   width: 100%;
 }
 
@@ -380,5 +386,5 @@ body {
 
 .yal-form-control:focus {
   outline: 1px solid var(--fg, #cdd6f4);
-  outline-offset: 2px;
+  outline-offset: 1px;
 }

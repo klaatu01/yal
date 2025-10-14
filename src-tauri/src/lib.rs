@@ -1,3 +1,4 @@
+use futures::SinkExt;
 use kameo::{actor::ActorRef, Actor};
 use tauri::{ActivationPolicy, Manager, WebviewEvent, WindowEvent};
 
@@ -199,7 +200,6 @@ pub fn run() {
                     focus_manager_actor.clone(),
                     application_tree_actor.clone(),
                 ));
-                ax_actor.tell(crate::ax::RefreshAX).await.unwrap();
 
                 let config_actor = config::ConfigActor::spawn(config::ConfigActor::new());
 
@@ -216,7 +216,7 @@ pub fn run() {
                     ax_actor.clone(),
                 );
 
-                let event_tx = event_router.spawn();
+                let mut event_tx = event_router.spawn();
 
                 config_watcher::ConfigWatcher::spawn(
                     event_tx.clone(),
@@ -243,6 +243,8 @@ pub fn run() {
                 app.manage(ax_actor);
                 app.manage(theme_manager_actor);
                 app.manage(config_actor);
+
+                event_tx.send(common::Events::RefreshTree).await.unwrap();
             });
             app.set_activation_policy(ActivationPolicy::Accessory);
             Ok(())

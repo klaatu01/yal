@@ -36,6 +36,7 @@ impl Message<Command> for CommandActor {
                 plugin_name,
                 command_name,
                 args,
+                ..
             } => self.run_plugin_cmd(plugin_name, command_name, args).await,
         }
     }
@@ -202,11 +203,14 @@ impl CommandActor {
             .unwrap_or_default()
             .iter()
             .flat_map(|p| {
-                p.commands.iter().map(move |c| Command::Plugin {
-                    plugin_name: p.plugin_name.clone(),
-                    command_name: c.clone(),
-                    args: None,
-                })
+                p.commands
+                    .iter()
+                    .filter(|c| !c.hidden)
+                    .map(move |c| Command::Plugin {
+                        plugin_name: p.plugin_name.clone(),
+                        command_name: c.name.clone(),
+                        args: None,
+                    })
             })
             .collect::<Vec<Command>>();
 

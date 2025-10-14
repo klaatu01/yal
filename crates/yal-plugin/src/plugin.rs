@@ -7,7 +7,8 @@ use std::path::PathBuf;
 use std::time::Instant;
 
 use crate::protocol::{
-    PluginExecuteContext, PluginExecuteRequest, PluginExecuteResponse, PluginInitResponse,
+    PluginCommand, PluginExecuteContext, PluginExecuteRequest, PluginExecuteResponse,
+    PluginInitResponse,
 };
 
 pub struct PluginRef {
@@ -18,7 +19,7 @@ pub struct PluginRef {
 
 pub struct Plugin {
     pub name: String,
-    pub commands: Vec<String>,
+    pub commands: Vec<PluginCommand>,
     pub lua: LuaPlugin,
 }
 
@@ -26,11 +27,25 @@ pub struct LuaPlugin {
     lua: Lua,
     module: Table,
     execute: Function,
+    config: Option<serde_json::Value>,
+}
+
+pub struct PluginManifest {
+    pub plugin_name: String,
+    pub commands: Vec<PluginCommand>,
 }
 
 impl LuaPlugin {
     pub fn new(plugin_ref: PluginRef) -> Result<Self> {
         let lua = Lua::new();
+
+        crate::deps::install_all(
+            &lua,
+            crate::deps::InstallOptions {
+                vendor_dir: Some(&plugin_ref.path.join("vendor")), // ok if missing
+                http_limits: None,                                 // or Some(HttpLimits { ... })
+            },
+        )?;
 
         let script_dir = plugin_ref.path;
         if !script_dir.is_dir() {
@@ -71,6 +86,7 @@ return mod
             lua,
             module,
             execute,
+            config: plugin_ref.config,
         })
     }
 
@@ -78,8 +94,8 @@ return mod
         let init_v = self.module.get("init")?;
         match init_v {
             mlua::Value::Function(init_fn) => {
-                let lua_ret = init_fn.call_async(()).await?;
-                // Directly convert Lua -> Rust (no JSON round-trip)
+                let lua_req = self.lua.to_value(&self.config)?;
+                let lua_ret = init_fn.call_async(lua_req).await?;
                 let response: PluginInitResponse = self.lua.from_value(lua_ret)?;
                 Ok(response)
             }
@@ -99,20 +115,16 @@ return mod
         #[cfg(debug_assertions)]
         log::info!("Running plugin command: {}", command);
 
-        // Build the request directly; mlua will serialize it without JSON
         let req = PluginExecuteRequest {
             command,
             context,
             args,
         };
 
-        // Rust -> Lua
         let lua_req = self.lua.to_value(&req)?;
 
-        // Call cached execute (async)
         let lua_ret: LuaValue = self.execute.call_async(lua_req).await?;
 
-        // Lua -> Rust (no JSON)
         let response: PluginExecuteResponse = self.lua.from_value(lua_ret)?;
 
         #[cfg(debug_assertions)]

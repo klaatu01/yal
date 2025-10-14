@@ -1,4 +1,4 @@
-use std::{path::PathBuf, sync::Arc};
+use std::path::PathBuf;
 
 use anyhow::{Context, Result};
 use git2::Repository;
@@ -6,7 +6,7 @@ use tokio::fs;
 
 use crate::{
     manager::config::PluginConfig,
-    plugin::Plugin,
+    plugin::{Plugin, PluginManifest},
     protocol::{PluginExecuteContext, PluginExecuteResponse},
 };
 
@@ -71,14 +71,14 @@ impl PluginManager {
         self.load_config().await?;
         for plugin in &self.config.plugins {
             log::info!("Installing plugin: {}", plugin.name);
-            log::info!("  from: {}", plugin.github_url);
+            log::info!("  from: {}", plugin.git);
             let plugin_dir = plugins_dir().join(&plugin.name);
             if plugin_dir.exists() {
                 log::info!("  already installed, skipping");
                 continue;
             }
-            let repo = Repository::clone(&plugin.github_url, &plugin_dir)
-                .with_context(|| format!("Failed cloning {}", plugin.github_url))?;
+            let repo = Repository::clone(&plugin.git, &plugin_dir)
+                .with_context(|| format!("Failed cloning {}", plugin.git))?;
             log::info!("  cloned to: {}", repo.path().parent().unwrap().display());
         }
         Ok(())
@@ -101,11 +101,7 @@ impl PluginManager {
             let init_response = lua_plugin.initialize().await?;
             let plugin = Plugin {
                 name: plugin.name.clone(),
-                commands: init_response
-                    .commands
-                    .iter()
-                    .map(|c| c.name.clone())
-                    .collect(),
+                commands: init_response.commands,
                 lua: lua_plugin,
             };
             log::info!(
@@ -130,7 +126,12 @@ impl PluginManager {
             .find(|p| p.name == plugin_name)
             .with_context(|| format!("Plugin '{}' not found", plugin_name))?;
 
-        if !plugin.commands.iter().any(|c| c == command_name) {
+        if !plugin
+            .commands
+            .iter()
+            .cloned()
+            .any(|c| c.name == command_name)
+        {
             return Err(anyhow::anyhow!(
                 "Command '{}' not found in plugin '{}'",
                 command_name,
@@ -164,10 +165,13 @@ impl PluginManager {
         self.execution_context = Some(context);
     }
 
-    pub async fn commands(&self) -> Vec<(String, Vec<String>)> {
+    pub async fn commands(&self) -> Vec<PluginManifest> {
         self.plugins
             .iter()
-            .map(|p| (p.name.clone(), p.commands.clone()))
+            .map(|p| PluginManifest {
+                plugin_name: p.name.clone(),
+                commands: p.commands.clone(),
+            })
             .collect()
     }
 }

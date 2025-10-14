@@ -260,7 +260,6 @@ fn RenderForm(
     on_input: Rc<dyn Fn(String, String)>,
     on_submit: Rc<dyn Fn(Action)>,
 ) -> AnyView {
-    let submit_label = form.submit_label.clone().unwrap_or_else(|| "Submit".into());
     let submit_on_enter = form.submit_on_enter.unwrap_or(true);
 
     view! {

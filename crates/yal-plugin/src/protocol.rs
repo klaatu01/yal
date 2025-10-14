@@ -1,10 +1,12 @@
 use serde::{Deserialize, Serialize};
 use yal_core::Popup;
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct PluginCommand {
     pub name: String,
     pub description: Option<String>,
+    #[serde(default)]
+    pub hidden: bool,
 }
 
 #[derive(Serialize, Deserialize)]
