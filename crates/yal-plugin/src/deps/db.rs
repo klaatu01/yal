@@ -221,7 +221,6 @@ pub fn install_db_preload(lua: &Lua) -> LuaResult<()> {
     let pkg: Table = lua.globals().get("package")?;
     let preload: Table = pkg.get("preload")?;
 
-    // package.preload["host.db"] = function() return { open = function(ns) ... end } end
     let loader = lua.create_function(|lua, ()| {
         let m = lua.create_table()?;
 
@@ -239,6 +238,6 @@ pub fn install_db_preload(lua: &Lua) -> LuaResult<()> {
         Ok(m)
     })?;
 
-    preload.set("host.db", loader)?;
+    preload.set("yal.db", loader)?;
     Ok(())
 }

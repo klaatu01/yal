@@ -18,7 +18,6 @@ pub struct InstallOptions<'a> {
     pub event_tx: kanal::Sender<PluginAPIRequest>,
 }
 
-/// Install host modules + vendor searcher into a Lua state.
 pub fn install_all(lua: &Lua, opts: InstallOptions) -> Result<()> {
     json::install_json_preload(lua)?;
 

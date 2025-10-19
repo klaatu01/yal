@@ -212,7 +212,7 @@ pub fn install_http_preload(lua: &Lua, env: HttpEnv) -> LuaResult<()> {
                             Value::Table(t) => t,
                             _ => {
                                 return Err(mlua::Error::external(
-                                    "host.http.request expects a table",
+                                    "yal.http.request expects a table",
                                 ));
                             }
                         };
@@ -342,6 +342,6 @@ pub fn install_http_preload(lua: &Lua, env: HttpEnv) -> LuaResult<()> {
         })
     }?;
 
-    preload.set("host.http", loader)?;
+    preload.set("yal.http", loader)?;
     Ok(())
 }

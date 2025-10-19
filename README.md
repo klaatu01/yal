@@ -289,6 +289,10 @@ return M
 
 A proper guide is on its way.
 
+### Plugin API
+
+Plugins communicate with YAL via the built-in Lua yal std library. See the [YAL Lua Library Reference](./docs/yal-std.md) for details.
+
 ### Example plugins
 
 - [yal-spotify-plugin](https://github.com/klaatu01/yal-spotify-plugin) — control Spotify playback

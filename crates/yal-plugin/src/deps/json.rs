@@ -27,6 +27,6 @@ pub fn install_json_preload(lua: &Lua) -> LuaResult<()> {
         Ok(m)
     })?;
 
-    preload.set("host.json", loader)?;
+    preload.set("yal.json", loader)?;
     Ok(())
 }

@@ -255,9 +255,6 @@ impl UserData for LuaTcpClient {
 /* ------------------------- Module preload ------------------------- */
 
 pub fn install_socket_preload(lua: &Lua) -> LuaResult<()> {
-    // package.preload["host.socket"] = function()
-    //   return { bind = function(ip, port) -> server end }
-    // end
     let pkg: Table = lua.globals().get("package")?;
     let preload: Table = pkg.get("preload")?;
 
@@ -282,6 +279,6 @@ pub fn install_socket_preload(lua: &Lua) -> LuaResult<()> {
         Ok(m)
     })?;
 
-    preload.set("host.socket", loader)?;
+    preload.set("yal.socket", loader)?;
     Ok(())
 }
