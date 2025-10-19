@@ -1,4 +1,6 @@
-use serde::{Deserialize, Serialize};
+use serde::de::{self, MapAccess, Visitor};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use std::fmt;
 use std::fmt::Display;
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
@@ -22,6 +24,12 @@ pub struct AppConfig {
     pub window: Option<WindowConfig>,
     pub theme: Option<String>,
     pub font: Option<FontConfig>,
+    pub keys: Option<KeysConfig>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct KeysConfig {
+    pub shortcuts: Option<Vec<Shortcut>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -141,7 +149,6 @@ pub struct Popup {
     pub width: Option<f32>,             // %; default 75%
     pub height: Option<f32>,            // %; default 75%
     pub content: Vec<Node>,             // layout + widgets
-    pub hotkeys: Option<Vec<Hotkey>>,   // optional hotkeys
     pub ui_schema_version: Option<u32>, // default 1
 }
 
@@ -242,8 +249,118 @@ pub struct OptionKV {
     pub value: serde_json::Value,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct Hotkey {
-    pub combo: String, // e.g., "ctrl+enter", "esc"
-    pub value: OptionKV,
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct ShortcutCommand {
+    pub plugin: String,
+    pub command: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct Shortcut {
+    pub combination: String,
+    pub command: ShortcutCommand,
+}
+
+// ----- ShortcutCommand as { plugin: "...", command: "..." } -----
+
+impl Serialize for ShortcutCommand {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeMap;
+        let mut map = serializer.serialize_map(Some(2))?;
+        map.serialize_entry("plugin", &self.plugin)?;
+        map.serialize_entry("command", &self.command)?;
+        map.end()
+    }
+}
+
+impl<'de> Deserialize<'de> for ShortcutCommand {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        struct SCVisitor;
+
+        impl<'de> Visitor<'de> for SCVisitor {
+            type Value = ShortcutCommand;
+
+            fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                f.write_str(r#"a map with keys "plugin" and "command""#)
+            }
+
+            fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> Result<Self::Value, A::Error> {
+                let mut plugin: Option<String> = None;
+                let mut command: Option<String> = None;
+
+                while let Some(key) = map.next_key::<String>()? {
+                    match key.as_str() {
+                        "plugin" => plugin = Some(map.next_value()?),
+                        "command" => command = Some(map.next_value()?),
+                        _ => {
+                            // consume unknown
+                            let _: de::IgnoredAny = map.next_value()?;
+                        }
+                    }
+                }
+
+                let plugin = plugin.ok_or_else(|| de::Error::missing_field("plugin"))?;
+                let command = command.ok_or_else(|| de::Error::missing_field("command"))?;
+
+                Ok(ShortcutCommand { plugin, command })
+            }
+        }
+
+        deserializer.deserialize_map(SCVisitor)
+    }
+}
+
+impl Serialize for Shortcut {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeMap;
+        let mut map = serializer.serialize_map(Some(1))?;
+        map.serialize_entry(&self.combination, &self.command)?;
+        map.end()
+    }
+}
+
+impl<'de> Deserialize<'de> for Shortcut {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        struct ShortcutVisitor;
+
+        impl<'de> Visitor<'de> for ShortcutVisitor {
+            type Value = Shortcut;
+
+            fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                f.write_str(r#"a single-entry map like { "<combo>": { plugin, command } }"#)
+            }
+
+            fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> Result<Self::Value, A::Error> {
+                // Read the first (and only) entry
+                let (combination, command): (String, ShortcutCommand) = match map.next_entry()? {
+                    Some(pair) => pair,
+                    None => return Err(de::Error::invalid_length(0, &self)),
+                };
+
+                // Ensure there are no extra entries
+                if map
+                    .next_entry::<de::IgnoredAny, de::IgnoredAny>()?
+                    .is_some()
+                {
+                    return Err(de::Error::custom(
+                        "expected a single-entry map for Shortcut, but found multiple entries",
+                    ));
+                }
+
+                log::info!(
+                    "Deserialized Shortcut: combination='{}', command=plugin:'{}', command:'{}'",
+                    combination,
+                    command.plugin,
+                    command.command
+                );
+
+                Ok(Shortcut {
+                    combination,
+                    command,
+                })
+            }
+        }
+
+        deserializer.deserialize_map(ShortcutVisitor)
+    }
 }

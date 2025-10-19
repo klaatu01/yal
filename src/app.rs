@@ -4,12 +4,13 @@ use leptos::task::spawn_local;
 use leptos::web_sys;
 use leptos::{ev::KeyboardEvent, prelude::*};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::rc::Rc;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 use yal_core::{
-    AppConfig, Command, CommandKind, Field, Form, Node, Popup, SelectField, SliderField,
-    TextField, Theme,
+    AppConfig, Command, CommandKind, Field, Form, Node, Popup, SelectField, Shortcut,
+    ShortcutCommand, SliderField, TextField, Theme,
 };
 
 use leptos::prelude::AnyView; // type-erased view to unify match/if arms
@@ -48,7 +49,7 @@ fn init_theme_listener() {
     });
 }
 
-fn init_config_listener() {
+fn init_config_listener(set_shortcuts: WriteSignal<Vec<Shortcut>>) {
     spawn_local(async move {
         let cb = Closure::<dyn FnMut(js_sys::Object)>::new(move |evt_obj: js_sys::Object| {
             if let Ok(payload) = js_sys::Reflect::get(&evt_obj, &JsValue::from_str("payload")) {
@@ -58,6 +59,11 @@ fn init_config_listener() {
                     }
                     if let Some(font_cfg) = &cfg.font {
                         crate::ui::apply_font_cfg(font_cfg);
+                    }
+                    if let Some(keys_cfg) = &cfg.keys {
+                        if let Some(shortcuts) = &keys_cfg.shortcuts {
+                            set_shortcuts.set(shortcuts.clone());
+                        }
                     }
                 }
             }
@@ -108,7 +114,7 @@ fn init_popup_listeners(set_popup: WriteSignal<Option<Popup>>) {
     });
 }
 
-fn load_config() {
+fn load_config(set_shortcuts: WriteSignal<Vec<Shortcut>>) {
     spawn_local(async move {
         let config = invoke(
             "get_config",
@@ -121,6 +127,11 @@ fn load_config() {
             }
             if let Some(font_cfg) = &cfg.font {
                 crate::ui::apply_font_cfg(font_cfg);
+            }
+            if let Some(keys_cfg) = &cfg.keys {
+                if let Some(shortcuts) = &keys_cfg.shortcuts {
+                    set_shortcuts.set(shortcuts.clone());
+                }
             }
         }
     });
@@ -706,12 +717,134 @@ fn raf_focus_search() {
     }
 }
 
+fn norm_token(t: &str) -> &str {
+    match t {
+        // modifiers
+        "control" | "ctrl" => "ctrl",
+        "alt" | "option" | "opt" => "alt",
+        "shift" => "shift",
+        "cmd" | "command" | "meta" | "super" | "win" => "cmd",
+
+        // special keys (aliases)
+        "esc" | "escape" => "esc",
+        "enter" | "return" => "enter",
+        "space" => "space",
+        "pgup" | "pageup" => "pageup",
+        "pgdn" | "pagedown" => "pagedown",
+        "arrowup" | "up" => "up",
+        "arrowdown" | "down" => "down",
+        "arrowleft" | "left" => "left",
+        "arrowright" | "right" => "right",
+        "plus" | "+" => "plus",
+        _ => t,
+    }
+}
+
+// Normalize a *config* string like "Ctrl + S" → "ctrl+s"
+fn normalize_combo_string(s: &str) -> String {
+    let mut parts: Vec<String> = s
+        .split('+')
+        .map(|p| norm_token(&p.trim().to_ascii_lowercase()).to_string())
+        .collect();
+
+    // Extract modifiers, dedupe, and sort for a stable order
+    let mut mods: Vec<String> = vec![];
+    let mut key: Option<String> = None;
+
+    for p in parts.drain(..) {
+        match p.as_str() {
+            "ctrl" | "alt" | "shift" | "cmd" => {
+                if !mods.contains(&p) {
+                    mods.push(p.to_string())
+                }
+            }
+            other => {
+                // the final non-mod token is considered the key
+                key = Some(other.to_string());
+            }
+        }
+    }
+
+    mods.sort_unstable_by(|a, b| {
+        ["ctrl", "alt", "shift", "cmd"]
+            .iter()
+            .position(|x| x == a)
+            .cmp(&["ctrl", "alt", "shift", "cmd"].iter().position(|x| x == b))
+    });
+
+    let k = key.unwrap_or_default();
+    if mods.is_empty() {
+        k
+    } else {
+        format!("{}+{}", mods.join("+"), k)
+    }
+}
+
+// Build canonical combo from a KeyboardEvent
+fn combo_from_event(ev: &KeyboardEvent) -> Option<String> {
+    // ignore pure modifier presses
+    let raw_key = ev.key(); // e.g. "s", "S", "Escape", "ArrowUp", "+", "F5"
+    let lower = raw_key.to_ascii_lowercase();
+
+    // map to canonical key token
+    let key = match lower.as_str() {
+        "shift" | "control" | "alt" | "meta" => return None, // just a modifier, no key yet
+        "escape" => "esc".to_string(),
+        "enter" | "return" => "enter".to_string(),
+        " " | "spacebar" | "space" => "space".to_string(),
+        "arrowup" => "up".to_string(),
+        "arrowdown" => "down".to_string(),
+        "arrowleft" => "left".to_string(),
+        "arrowright" => "right".to_string(),
+        "+" => "plus".to_string(),
+        // function keys: key could be "F1".."F24"
+        k if k.starts_with('f') && k.len() <= 3 && k[1..].chars().all(|c| c.is_ascii_digit()) => {
+            k.to_string()
+        }
+        // single printable
+        k if k.len() == 1 => k.to_string(),
+        // common names
+        "tab" | "backspace" | "delete" | "insert" | "home" | "end" | "pageup" | "pagedown"
+        | "minus" | "equals" | "comma" | "period" | "slash" | "backslash" | "semicolon"
+        | "quote" | "bracketleft" | "bracketright" | "grave" => lower.clone(),
+        _ => lower.clone(), // fall back (you can tighten this if desired)
+    };
+
+    let mut mods: Vec<&str> = vec![];
+    if ev.ctrl_key() {
+        mods.push("ctrl");
+    }
+    if ev.alt_key() {
+        mods.push("alt");
+    }
+    if ev.shift_key() {
+        mods.push("shift");
+    }
+    if ev.meta_key() {
+        mods.push("cmd");
+    } // macOS Command
+
+    mods.sort_unstable_by(|a, b| {
+        ["ctrl", "alt", "shift", "cmd"]
+            .iter()
+            .position(|x| x == a)
+            .cmp(&["ctrl", "alt", "shift", "cmd"].iter().position(|x| x == b))
+    });
+
+    Some(if mods.is_empty() {
+        key
+    } else {
+        format!("{}+{}", mods.join("+"), key)
+    })
+}
+
 #[component]
 pub fn App() -> impl IntoView {
     let (cmds, set_cmd_list) = signal(Vec::<Command>::new());
     let (query, set_query) = signal(String::new());
     let (selected, set_selected) = signal(0usize);
     let (filter, set_filter) = signal(Option::<CommandKind>::None);
+    let (shortcuts, set_shortcuts) = signal(Vec::<Shortcut>::new());
 
     let reset = move || {
         set_selected.set(0);
@@ -720,9 +853,9 @@ pub fn App() -> impl IntoView {
 
     let (popup, set_popup) = signal::<Option<Popup>>(None);
 
-    load_config();
+    load_config(set_shortcuts);
     load_theme();
-    init_config_listener();
+    init_config_listener(set_shortcuts);
     init_theme_listener();
     init_cmd_list_listener(set_cmd_list, reset);
     init_popup_listeners(set_popup);
@@ -740,6 +873,15 @@ pub fn App() -> impl IntoView {
         Some(CommandKind::Theme) => "theme".to_string(),
         Some(CommandKind::Plugin) => "plugin".to_string(),
         None => String::new(),
+    });
+
+    let shortcut_map = Memo::new(move |_| {
+        let mut m: HashMap<String, ShortcutCommand> = HashMap::new();
+        for s in shortcuts.get() {
+            let k = normalize_combo_string(&s.combination);
+            m.insert(k, s.command.clone());
+        }
+        m
     });
 
     let open_selected = move || {
@@ -836,7 +978,22 @@ pub fn App() -> impl IntoView {
                     .await;
                 });
             }
-            _ => {}
+            _ => {
+                if let Some(combo) = combo_from_event(&ev) {
+                    if let Some(sc) = shortcut_map.get().get(&combo).cloned() {
+                        ev.prevent_default();
+                        let cmd = Command::Plugin {
+                            plugin_name: sc.plugin,
+                            command_name: sc.command,
+                            args: None,
+                        };
+                        spawn_local(async move {
+                            let args = serde_wasm_bindgen::to_value(&RunCmdArgs { cmd }).unwrap();
+                            let _ = invoke("run_cmd", args).await;
+                        });
+                    }
+                }
+            }
         }
     };
 
