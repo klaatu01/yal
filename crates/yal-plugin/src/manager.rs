@@ -68,7 +68,17 @@ impl PluginManager {
                 log::info!("  already installed, skipping");
                 continue;
             }
-            let repo = Repository::clone(&plugin.git, &plugin_dir)
+
+            let giturl = if plugin.git.starts_with("http://")
+                || plugin.git.starts_with("https://")
+                || plugin.git.starts_with("git@")
+            {
+                plugin.git.clone()
+            } else {
+                format!("https://github.com/{}.git", plugin.git)
+            };
+
+            let repo = Repository::clone(&giturl, &plugin_dir)
                 .with_context(|| format!("Failed cloning {}", plugin.git))?;
             log::info!("  cloned to: {}", repo.path().parent().unwrap().display());
         }
