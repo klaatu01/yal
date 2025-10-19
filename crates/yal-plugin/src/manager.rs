@@ -14,7 +14,7 @@ mod config;
 
 pub fn plugins_config_path() -> PathBuf {
     let mut path = dirs::home_dir().expect("Failed to get home directory");
-    path.push(".config/yal/plugins.toml");
+    path.push(".config/yal/plugins.lua");
     path
 }
 
@@ -53,25 +53,14 @@ impl PluginManager {
 
     pub async fn load_config(&mut self) -> Result<()> {
         let path = plugins_config_path();
-
-        if !path.exists() {
-            self.config = PluginConfig::default();
-            return Ok(());
-        }
-
-        let raw = fs::read_to_string(&path)
-            .await
-            .with_context(|| format!("Failed reading {}", path.display()))?;
-
-        self.config = config::parse_plugins_toml(&raw)
-            .with_context(|| format!("Failed parsing {}", path.display()))?;
-
+        let config = yal_config::load_config::<PluginConfig>(&path);
+        self.config = config;
         Ok(())
     }
 
     pub async fn install(&mut self) -> Result<()> {
         self.load_config().await?;
-        for plugin in &self.config.plugins {
+        for plugin in &self.config {
             log::info!("Installing plugin: {}", plugin.name);
             log::info!("  from: {}", plugin.git);
             let plugin_dir = plugins_dir().join(&plugin.name);
@@ -88,7 +77,7 @@ impl PluginManager {
 
     pub async fn load_plugins(&mut self) -> Result<()> {
         self.plugins.clear();
-        for plugin in &self.config.plugins {
+        for plugin in &self.config {
             let plugin_dir = plugins_dir().join(&plugin.name);
             if !plugin_dir.exists() {
                 log::warn!("Plugin '{}' is not installed, skipping", plugin.name);

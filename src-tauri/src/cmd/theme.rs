@@ -1,6 +1,7 @@
 use crate::config;
 use kameo::{prelude::Message, Actor};
 use tauri::Emitter;
+use yal_config::load_config;
 use yal_theme::ALL;
 
 #[derive(Actor)]
@@ -23,7 +24,9 @@ impl ThemeManagerActor {
     }
 
     fn load_themes(&self) -> Vec<yal_core::Theme> {
-        let user_themes = config::load_themes();
+        let user_themes = load_config::<Vec<yal_core::Theme>>(config::themes_path().as_path())
+            .into_iter()
+            .collect::<Vec<_>>();
         let default_themes = ALL
             .iter()
             .copied()

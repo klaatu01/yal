@@ -1,0 +1,9 @@
+[package]
+name = "yal-config"
+version = "0.0.0"
+edition = "2024"
+
+[dependencies]
+mlua = { version = "0.11.4", features = ["async", "lua54", "vendored", "anyhow", "serialize", "send"] }
+anyhow = "1.0.100"
+serde = { version = "1", features = ["derive"] }

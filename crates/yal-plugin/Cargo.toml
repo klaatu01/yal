@@ -18,5 +18,5 @@ reqwest = { version = "0.12.24", features = ["json", "stream"] }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.145"
 tokio = { version = "1.47.1", features = ["fs", "sync"] }
-toml = "0.9.7"
 yal-core = { path = "../yal-core" }
+yal-config = { path = "../yal-config" }
