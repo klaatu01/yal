@@ -1,0 +1,36 @@
+# Roadmap of features before alpha release
+
+- [x] Basic Lua Plugin Support
+    - [x] Basic Plugin System
+    - [x] Basic Plugin API
+    - [x] Plugin Loading and Unloading
+- [x] Basic Theme Support
+    - [x] Theme Loading
+    - [x] Basic Theme API
+- [x] Core Features
+    - [x] Search Functionality
+    - [x] Multi-window Support
+    - [x] Basic Hot Keys
+    - [x] Plugin Ecosystem
+    - [x] Hot reloading of Config, Plugins and Themes
+- [] Hot key overhaul
+    - [] Full hot key customisation
+    - [] Per-plugin hot keys
+- [] cli
+    - [] Daemonisation
+    - [] Manage installed plugins
+    - [] Plugin scaffolding
+    - [] Manage themes
+- [] Advanced Plugin API
+    - [] BYO Dependencies
+    - [] Inter-plugin Dependencies
+    - [] Plugin Lock file for change tracking
+    - [] Plugin testing API
+- [] Advanced theme support
+    - [] Improved customisation
+- [] Fixes and Improvements
+    - [] Fix multi window switching focus bug
+    - [] Improve plugin failure handling
+    - [] Documentation
+- [] Test Coverage
+- [] Refactoring
