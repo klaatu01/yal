@@ -1,4 +1,4 @@
-use std::{collections::HashSet, thread};
+use std::thread;
 
 use kameo::{
     actor::ActorRef,
@@ -12,7 +12,7 @@ use yal_core::{AppInfo, Command, WindowTarget};
 
 use crate::{
     application_tree,
-    ax::{self, AXActor, AX},
+    ax::{self, AXActor},
     cmd::app::get_app_info,
 };
 
@@ -35,7 +35,9 @@ impl Message<Command> for CommandActor {
             Command::Plugin {
                 plugin_name,
                 command_name,
-            } => self.run_plugin_cmd(plugin_name, command_name).await,
+                args,
+                ..
+            } => self.run_plugin_cmd(plugin_name, command_name, args).await,
         }
     }
 }
@@ -103,51 +105,31 @@ impl CommandActor {
         &self,
         plugin_name: String,
         command_name: String,
+        args: Option<serde_json::Value>,
     ) -> Result<(), String> {
-        let application_tree_ref = self
-            .app_handle
-            .state::<ActorRef<application_tree::ApplicationTreeActor>>();
-
-        let ax_ref = self.app_handle.state::<ActorRef<AXActor>>();
-        let tree = application_tree_ref
-            .ask(application_tree::SearchParam::All)
-            .await
-            .unwrap_or_default();
-
-        let current_display = ax_ref.ask(ax::CurrentDisplaySpace).await.unwrap();
-
-        let context = yal_plugin::protocol::PluginExecuteContext {
-            windows: tree
-                .into_iter()
-                .map(|res| yal_plugin::protocol::Window {
-                    app_name: res.app_name,
-                    title: res.title,
-                    pid: res.pid,
-                    window_id: res.window_id.0,
-                    display_id: res.display_id.to_string(),
-                    space_id: res.space_id.0,
-                    is_focused: res.is_focused,
-                    space_index: res.space_index,
-                })
-                .collect(),
-            displays: vec![],
-            current_display: yal_plugin::protocol::Display {
-                display_id: current_display.display_id.to_string(),
-                current_space_id: current_display.space_id.0,
-            },
-        };
-
+        if let Some(args) = &args {
+            log::info!("Running plugin command: {}::{}", plugin_name, command_name,);
+            log::info!("With args: {}", serde_json::to_string_pretty(args).unwrap());
+        }
         let plugin_ref = self
             .app_handle
             .state::<ActorRef<crate::plugin::PluginManagerActor>>();
 
-        plugin_ref
+        let response = plugin_ref
             .ask(crate::plugin::ExecutePluginCommand {
                 plugin_name,
                 command_name,
-                context,
+                args,
             })
-            .await;
+            .await
+            .map_err(|e| e.to_string())?;
+
+        if let Some(popup) = response.popup {
+            let _ = self.app_handle.emit("popup://show", popup);
+        } else if response.hide {
+            self.app_handle.hide().map_err(|e| e.to_string())?;
+        }
+
         Ok(())
     }
 
@@ -221,10 +203,14 @@ impl CommandActor {
             .unwrap_or_default()
             .iter()
             .flat_map(|p| {
-                p.commands.iter().map(move |c| Command::Plugin {
-                    plugin_name: p.plugin_name.clone(),
-                    command_name: c.clone(),
-                })
+                p.commands
+                    .iter()
+                    .filter(|c| !c.hidden)
+                    .map(move |c| Command::Plugin {
+                        plugin_name: p.plugin_name.clone(),
+                        command_name: c.name.clone(),
+                        args: None,
+                    })
             })
             .collect::<Vec<Command>>();
 
@@ -234,7 +220,13 @@ impl CommandActor {
 
 #[tauri::command]
 pub async fn run_cmd(app: tauri::AppHandle, cmd: Command) -> Result<(), String> {
+    let now = std::time::Instant::now();
+    log::info!("Running command: {:?}", cmd);
     let handle = app.state::<ActorRef<CommandActor>>();
-    handle.ask(cmd).await.map_err(|e| e.to_string())?;
+    match handle.ask(cmd).await.map_err(|e| e.to_string()) {
+        Ok(res) => res,
+        Err(e) => log::error!("Failed to run command: {}", e),
+    }
+    log::info!("Command executed in {:?}", now.elapsed());
     Ok(())
 }

@@ -3,8 +3,12 @@ use mlua::prelude::LuaSerdeExt;
 use mlua::{Function, Lua, Table, Value as LuaValue};
 use std::path::PathBuf;
 
+#[cfg(debug_assertions)]
+use std::time::Instant;
+
 use crate::protocol::{
-    PluginExecuteContext, PluginExecuteRequest, PluginExecuteResponse, PluginInitResponse,
+    PluginAPIRequest, PluginCommand, PluginExecuteContext, PluginExecuteRequest,
+    PluginExecuteResponse, PluginInitResponse,
 };
 
 pub struct PluginRef {
@@ -15,18 +19,34 @@ pub struct PluginRef {
 
 pub struct Plugin {
     pub name: String,
-    pub commands: Vec<String>,
+    pub commands: Vec<PluginCommand>,
     pub lua: LuaPlugin,
 }
 
 pub struct LuaPlugin {
     lua: Lua,
     module: Table,
+    execute: Function,
+    config: Option<serde_json::Value>,
+}
+
+pub struct PluginManifest {
+    pub plugin_name: String,
+    pub commands: Vec<PluginCommand>,
 }
 
 impl LuaPlugin {
-    pub fn new(plugin_ref: PluginRef) -> Result<Self> {
+    pub fn new(plugin_ref: PluginRef, event_tx: kanal::Sender<PluginAPIRequest>) -> Result<Self> {
         let lua = Lua::new();
+
+        crate::deps::install_all(
+            &lua,
+            crate::deps::InstallOptions {
+                vendor_dir: Some(&plugin_ref.path.join("vendor")), // ok if missing
+                http_limits: None,                                 // or Some(HttpLimits { ... })
+                event_tx,
+            },
+        )?;
 
         let script_dir = plugin_ref.path;
         if !script_dir.is_dir() {
@@ -53,21 +73,31 @@ return mod
         // Evaluate the bootstrap and capture the returned module table
         let module: Table = lua
             .load(&bootstrap)
-            .set_name(&format!("plugin://{}/{}", plugin_ref.name, "init"))
+            .set_name(format!("plugin://{}/{}", plugin_ref.name, "init"))
             .eval()
             .with_context(|| format!("Failed to load plugin '{}'", plugin_ref.name))?;
 
-        Ok(Self { lua, module })
+        // Cache `execute`
+        let execute = match module.get("execute")? {
+            mlua::Value::Function(f) => f,
+            _ => bail!("plugin 'execute' is not a function"),
+        };
+
+        Ok(Self {
+            lua,
+            module,
+            execute,
+            config: plugin_ref.config,
+        })
     }
 
     pub async fn initialize(&self) -> Result<PluginInitResponse> {
         let init_v = self.module.get("init")?;
         match init_v {
             mlua::Value::Function(init_fn) => {
-                let lua_ret = init_fn.call_async(()).await?;
-                let json: serde_json::Value = self.lua.from_value(lua_ret)?;
-                let response: PluginInitResponse = serde_json::from_value(json)
-                    .with_context(|| "Failed to parse plugin init response")?;
+                let lua_req = self.lua.to_value(&self.config)?;
+                let lua_ret = init_fn.call_async(lua_req).await?;
+                let response: PluginInitResponse = self.lua.from_value(lua_ret)?;
                 Ok(response)
             }
             _ => bail!("plugin 'init' is not a function"),
@@ -78,23 +108,28 @@ return mod
         &self,
         command: String,
         context: &PluginExecuteContext,
+        args: Option<serde_json::Value>,
     ) -> Result<PluginExecuteResponse> {
-        let run_v = self.module.get("execute")?;
-        let run_fn: Function = match run_v {
-            mlua::Value::Function(f) => f,
-            _ => bail!("plugin 'execute' is not a function"),
+        #[cfg(debug_assertions)]
+        let now = Instant::now();
+
+        #[cfg(debug_assertions)]
+        log::info!("Running plugin command: {}", command);
+
+        let req = PluginExecuteRequest {
+            command,
+            context,
+            args,
         };
 
-        let req = PluginExecuteRequest { command, context };
+        let lua_req = self.lua.to_value(&req)?;
 
-        let lua_req = self.lua.to_value(&serde_json::to_value(&req)?)?;
+        let lua_ret: LuaValue = self.execute.call_async(lua_req).await?;
 
-        let lua_ret: LuaValue = run_fn.call_async(lua_req).await?;
+        let response: PluginExecuteResponse = self.lua.from_value(lua_ret)?;
 
-        let json: serde_json::Value = self.lua.from_value(lua_ret)?;
-
-        let response: PluginExecuteResponse = serde_json::from_value(json)
-            .with_context(|| "Failed to parse plugin execute response")?;
+        #[cfg(debug_assertions)]
+        log::info!("Plugin command completed in {:.2?}", now.elapsed());
 
         Ok(response)
     }

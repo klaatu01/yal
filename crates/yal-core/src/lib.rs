@@ -74,6 +74,7 @@ pub enum Command {
     Plugin {
         plugin_name: String,
         command_name: String,
+        args: Option<serde_json::Value>,
     },
 }
 
@@ -98,6 +99,7 @@ impl Command {
             Command::Plugin {
                 plugin_name,
                 command_name,
+                ..
             } => format!("{} - {}", plugin_name, command_name),
         }
     }
@@ -130,4 +132,118 @@ impl CommandKind {
                 | (CommandKind::Plugin, Command::Plugin { .. })
         )
     }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Popup {
+    pub id: Option<String>,
+    pub title: Option<String>,
+    pub width: Option<f32>,             // %; default 75%
+    pub height: Option<f32>,            // %; default 75%
+    pub content: Vec<Node>,             // layout + widgets
+    pub hotkeys: Option<Vec<Hotkey>>,   // optional hotkeys
+    pub ui_schema_version: Option<u32>, // default 1
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum Node {
+    // Layout
+    VStack {
+        gap: Option<f32>,
+        children: Vec<Node>,
+    },
+    HStack {
+        gap: Option<f32>,
+        children: Vec<Node>,
+    },
+    Grid {
+        cols: u16,
+        gap: Option<f32>,
+        children: Vec<Node>,
+    },
+
+    // Content
+    Markdown {
+        md: String,
+    },
+    Html {
+        html: String,
+    }, // render with sanitization
+    Text {
+        text: String,
+        variant: Option<TextVariant>,
+    },
+    Image {
+        src: String,
+        alt: Option<String>,
+        w: Option<u32>,
+        h: Option<u32>,
+    },
+
+    // Form (single submit)
+    Form(Form),
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "snake_case")]
+pub enum TextVariant {
+    Muted,
+    Caption,
+    Code,
+    Emphasis,
+    Heading,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Form {
+    pub name: Option<String>,
+    #[serde(default)]
+    pub fields: Vec<Field>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct TextField {
+    pub name: String,
+    pub label: Option<String>,
+    pub placeholder: Option<String>,
+    pub max_length: Option<u32>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct SelectField {
+    pub name: String,
+    pub label: Option<String>,
+    pub options: Vec<OptionKV>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct SliderField {
+    pub name: String,
+    pub label: Option<String>,
+    pub min: f64,
+    pub max: f64,
+    pub step: f64,
+    pub value: Option<f64>,
+    pub show_value: bool,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum Field {
+    Text(TextField),
+    Select(SelectField),
+    Slider(SliderField),
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct OptionKV {
+    pub label: String,
+    pub value: serde_json::Value,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Hotkey {
+    pub combo: String, // e.g., "ctrl+enter", "esc"
+    pub value: OptionKV,
 }

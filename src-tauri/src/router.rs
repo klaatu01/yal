@@ -1,4 +1,3 @@
-use futures::StreamExt;
 use kameo::actor::ActorRef;
 use tauri::Emitter;
 
@@ -14,6 +13,7 @@ pub struct EventRouter {
     config_ref: ActorRef<ConfigActor>,
     theme_ref: ActorRef<ThemeManagerActor>,
     application_tree_ref: ActorRef<crate::application_tree::ApplicationTreeActor>,
+    ax_ref: ActorRef<crate::ax::AXActor>,
     plugin_manager_ref: ActorRef<crate::plugin::PluginManagerActor>,
 }
 
@@ -24,6 +24,7 @@ impl EventRouter {
         theme_ref: ActorRef<ThemeManagerActor>,
         application_tree_ref: ActorRef<ApplicationTreeActor>,
         plugin_manager_ref: ActorRef<crate::plugin::PluginManagerActor>,
+        ax_ref: ActorRef<crate::ax::AXActor>,
     ) -> Self {
         Self {
             app_handle,
@@ -31,13 +32,15 @@ impl EventRouter {
             theme_ref,
             application_tree_ref,
             plugin_manager_ref,
+            ax_ref,
         }
     }
 
-    pub fn spawn(self) -> futures::channel::mpsc::UnboundedSender<crate::common::Events> {
-        let (event_tx, mut event_rx) = futures::channel::mpsc::unbounded();
+    pub fn spawn(self) -> kanal::Sender<Events> {
+        let (event_tx, event_rx) = kanal::unbounded::<Events>();
         tauri::async_runtime::spawn(async move {
-            while let Some(event) = event_rx.next().await {
+            let event_rx = event_rx.as_async();
+            while let Ok(event) = event_rx.recv().await {
                 match event {
                     Events::ReloadConfig => {
                         log::info!("EventRouter: ReloadConfig event received");
@@ -65,8 +68,42 @@ impl EventRouter {
                         log::info!("EventRouter: RefreshTree event received");
                         let _ = self
                             .application_tree_ref
-                            .tell(crate::application_tree::RefreshTree)
+                            .ask(crate::application_tree::RefreshTree)
                             .await;
+
+                        let tree = self
+                            .application_tree_ref
+                            .ask(crate::application_tree::SearchParam::All)
+                            .await
+                            .unwrap_or_default();
+
+                        let current_display = self
+                            .ax_ref
+                            .ask(crate::ax::CurrentDisplaySpace)
+                            .await
+                            .unwrap();
+
+                        let context = yal_plugin::protocol::PluginExecuteContext {
+                            windows: tree
+                                .into_iter()
+                                .map(|res| yal_plugin::protocol::Window {
+                                    app_name: res.app_name,
+                                    title: res.title,
+                                    pid: res.pid,
+                                    window_id: res.window_id.0,
+                                    display_id: res.display_id.to_string(),
+                                    space_id: res.space_id.0,
+                                    is_focused: res.is_focused,
+                                    space_index: res.space_index,
+                                })
+                                .collect(),
+                            displays: vec![],
+                            current_display: yal_plugin::protocol::Display {
+                                display_id: current_display.display_id.to_string(),
+                                current_space_id: current_display.space_id.0,
+                            },
+                        };
+                        let _ = self.plugin_manager_ref.tell(context).await;
                     }
                     Events::ReloadPlugins => {
                         log::info!("EventRouter: ReloadPlugins event received");

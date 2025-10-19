@@ -112,3 +112,279 @@ body {
   background: var(--hl);
   color: var(--hl-text);
 }
+
+/* --- Popup overlay & container ------------------------------------------- */
+
+.yal-popup-overlay {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, var(--bg), transparent 60%);
+  /* subtle dim */
+  z-index: 9999;
+  -webkit-app-region: no-drag;
+}
+
+.yal-popup {
+  background: var(--bg);
+  color: var(--text);
+  width: 75%;
+  height: 75%;
+  border: 1px solid var(--bg);
+  /* same border tone as bar */
+  border-radius: var(--radius);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, .35);
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  overflow: hidden;
+  font: inherit;
+}
+
+/* Header / body / footer mimic your bar spacing */
+.yal-popup-header {
+  display: flex;
+  align-items: center;
+  gap: var(--prefix-gap);
+  min-height: var(--bar-h);
+  padding: var(--pad);
+  background: var(--bg);
+  border-bottom: 1px solid var(--bg);
+  color: var(--hl);
+  font-weight: 600;
+  user-select: none;
+}
+
+.yal-popup-body {
+  padding: var(--pad);
+  overflow: auto;
+  scrollbar-width: none;
+}
+
+.yal-popup-body::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+.yal-popup-footer {
+  display: flex;
+  gap: var(--pad);
+  justify-content: flex-end;
+  align-items: center;
+  padding: var(--pad);
+  border-top: 1px solid var(--bg);
+  background: var(--bg);
+}
+
+/* --- Layout nodes -------------------------------------------------------- */
+
+.yal-vstack {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--pad) * 0.5);
+}
+
+.yal-hstack {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--pad) * 0.5);
+}
+
+.yal-grid {
+  display: grid;
+  gap: calc(var(--pad) * 0.5);
+}
+
+/* --- Typography / content ------------------------------------------------ */
+
+.yal-text {
+  color: var(--text);
+  padding: calc(var(--pad) * 0.5);
+}
+
+.yal-text.muted {
+  opacity: 0.75;
+}
+
+.yal-text.caption {
+  font-size: 12px;
+  opacity: 0.75;
+}
+
+.yal-text.code {
+  font-family: var(--font);
+  background: #111;
+  padding: 0 4px;
+  border-radius: 3px;
+}
+
+.yal-text.emphasis {
+  color: var(--hl);
+}
+
+.yal-text.heading {
+  color: var(--hl);
+  font-weight: 700;
+}
+
+.yal-md {
+  color: var(--text);
+}
+
+.yal-md code {
+  font-family: var(--font);
+  background: #111;
+  color: var(--hl);
+  padding: 0 4px;
+  border-radius: 3px;
+}
+
+.yal-md pre {
+  background: #111;
+  color: var(--text);
+  padding: calc(var(--pad) * 0.75);
+  border-radius: 4px;
+  overflow: auto;
+}
+
+/* Images respect the flat aesthetic */
+.yal-img {
+  display: block;
+  max-width: 100%;
+  border-radius: var(--radius);
+}
+
+/* --- Form elements (aligned with search input style) --------------------- */
+
+.yal-form {
+  display: grid;
+  gap: calc(var(--pad) * 0.75);
+}
+
+.yal-form label {
+  display: block;
+  font: inherit;
+  color: var(--text);
+  opacity: 0.9;
+  margin-bottom: 2px;
+}
+
+.yal-input,
+.yal-textarea,
+.yal-select,
+.yal-slider {
+  width: 100%;
+  font: inherit;
+  color: var(--text);
+  background: transparent;
+  border: 1px solid var(--bg);
+  outline: none;
+  padding: calc(var(--pad) * 0.5);
+  border-radius: var(--radius);
+  caret-color: var(--hl);
+}
+
+
+.yal-input::placeholder,
+.yal-textarea::placeholder {
+  padding: calc(var(--pad) * 0.5);
+  color: #777;
+}
+
+.yal-input:focus,
+.yal-textarea:focus,
+.yal-select:focus,
+.yal-slider:focus {
+  padding: 4px 6px;
+  border-color: var(--hl);
+  box-shadow: 0 0 0 1px var(--hl);
+}
+
+.yal-checkbox,
+.yal-radio {
+  accent-color: var(--hl);
+}
+
+/* Range slider minimal styling */
+.yal-slider {
+  -webkit-appearance: none;
+  height: calc(var(--lh) * 0.25);
+  background: #111;
+  border: none;
+  padding: calc(var(--pad) * 0.5);
+}
+
+.yal-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 10px;
+  height: calc(var(--lh) * 0.15);
+  border-radius: 50%;
+  background: var(--hl);
+  border: 1px solid var(--hl-text);
+  padding: calc(var(--pad) * 0.5);
+}
+
+/* --- Buttons that match highlight --------------------------------------- */
+
+.yal-btn {
+  font: inherit;
+  padding: 4px 10px;
+  border: 1px solid var(--bg);
+  background: transparent;
+  color: var(--text);
+  border-radius: var(--radius);
+  cursor: default;
+}
+
+.yal-btn:hover {
+  border-color: var(--hl);
+  color: var(--hl);
+}
+
+.yal-btn.primary {
+  background: var(--hl);
+  color: var(--hl-text);
+  border-color: var(--hl);
+}
+
+.yal-btn.primary:hover {
+  filter: brightness(0.95);
+}
+
+/* --- Utility classes ----------------------------------------------------- */
+
+.yal-hidden {
+  display: none !important;
+}
+
+.yal-row {
+  display: flex;
+  gap: var(--pad);
+  align-items: center;
+}
+
+.yal-grow {
+  flex: 1;
+}
+
+.yal-slider-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.yal-slider {
+  padding: calc(var(--pad) * 0.5);
+  width: 100%;
+}
+
+.yal-slider-val {
+  min-width: 3ch;
+  text-align: right;
+  opacity: 0.8;
+}
+
+.yal-form-control:focus {
+  outline: 1px solid var(--fg, #cdd6f4);
+  outline-offset: 1px;
+}

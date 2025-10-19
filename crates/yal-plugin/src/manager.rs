@@ -1,10 +1,14 @@
-use std::{path::PathBuf, sync::Arc};
+use std::path::PathBuf;
 
 use anyhow::{Context, Result};
 use git2::Repository;
 use tokio::fs;
 
-use crate::{manager::config::PluginConfig, plugin::Plugin, protocol::PluginExecuteContext};
+use crate::{
+    manager::config::PluginConfig,
+    plugin::{Plugin, PluginManifest},
+    protocol::{PluginExecuteContext, PluginExecuteResponse},
+};
 
 mod config;
 
@@ -23,13 +27,17 @@ pub fn plugins_dir() -> PathBuf {
 pub struct PluginManager {
     pub config: PluginConfig,
     pub plugins: Vec<Plugin>,
+    pub execution_context: Option<PluginExecuteContext>,
+    pub event_tx: kanal::Sender<crate::protocol::PluginAPIRequest>,
 }
 
 impl PluginManager {
-    pub fn new() -> Self {
+    pub fn new(event_tx: kanal::Sender<crate::protocol::PluginAPIRequest>) -> Self {
         Self {
             config: PluginConfig::default(),
             plugins: Vec::new(),
+            execution_context: None,
+            event_tx,
         }
     }
 
@@ -65,14 +73,14 @@ impl PluginManager {
         self.load_config().await?;
         for plugin in &self.config.plugins {
             log::info!("Installing plugin: {}", plugin.name);
-            log::info!("  from: {}", plugin.github_url);
+            log::info!("  from: {}", plugin.git);
             let plugin_dir = plugins_dir().join(&plugin.name);
             if plugin_dir.exists() {
                 log::info!("  already installed, skipping");
                 continue;
             }
-            let repo = Repository::clone(&plugin.github_url, &plugin_dir)
-                .with_context(|| format!("Failed cloning {}", plugin.github_url))?;
+            let repo = Repository::clone(&plugin.git, &plugin_dir)
+                .with_context(|| format!("Failed cloning {}", plugin.git))?;
             log::info!("  cloned to: {}", repo.path().parent().unwrap().display());
         }
         Ok(())
@@ -91,15 +99,12 @@ impl PluginManager {
                 path: plugin_dir.clone(),
                 config: plugin.config.clone(),
             };
-            let lua_plugin = crate::plugin::LuaPlugin::new(plugin_ref).unwrap();
+            let lua_plugin =
+                crate::plugin::LuaPlugin::new(plugin_ref, self.event_tx.clone()).unwrap();
             let init_response = lua_plugin.initialize().await?;
             let plugin = Plugin {
                 name: plugin.name.clone(),
-                commands: init_response
-                    .commands
-                    .iter()
-                    .map(|c| c.name.clone())
-                    .collect(),
+                commands: init_response.commands,
                 lua: lua_plugin,
             };
             log::info!(
@@ -116,35 +121,60 @@ impl PluginManager {
         &self,
         plugin_name: &str,
         command_name: &str,
-        context: PluginExecuteContext,
-    ) -> Result<()> {
+        args: Option<serde_json::Value>,
+    ) -> Result<PluginExecuteResponse> {
         let plugin = self
             .plugins
             .iter()
             .find(|p| p.name == plugin_name)
-            .ok_or_else(|| anyhow::anyhow!("Plugin '{}' not found", plugin_name))
-            .with_context(|| format!("Failed to find plugin '{}'", plugin_name))?;
-        if !plugin.commands.contains(&command_name.to_string()) {
+            .with_context(|| format!("Plugin '{}' not found", plugin_name))?;
+
+        if !plugin
+            .commands
+            .iter()
+            .cloned()
+            .any(|c| c.name == command_name)
+        {
             return Err(anyhow::anyhow!(
                 "Command '{}' not found in plugin '{}'",
                 command_name,
                 plugin_name
-            ))
-            .with_context(|| {
-                format!(
-                    "Failed to find command '{}' in plugin '{}'",
-                    command_name, plugin_name
-                )
-            });
+            ));
         }
-        let _ = plugin.lua.run(command_name.to_string(), &context).await?;
-        Ok(())
+
+        if let Some(ctx) = &self.execution_context {
+            log::info!(
+                "Executing command '{}' of plugin '{}'",
+                command_name,
+                plugin_name,
+            );
+            let resp = plugin.lua.run(command_name.to_string(), ctx, args).await?;
+
+            Ok(resp)
+        } else {
+            log::info!(
+                "Executing command '{}' of plugin '{}' with no context",
+                command_name,
+                plugin_name
+            );
+            Err(anyhow::anyhow!(
+                "No execution context set for plugin command"
+            ))
+        }
     }
 
-    pub async fn commands(&self) -> Vec<(String, Vec<String>)> {
+    pub fn set_execution_context(&mut self, context: PluginExecuteContext) {
+        log::info!("Setting execution context");
+        self.execution_context = Some(context);
+    }
+
+    pub async fn commands(&self) -> Vec<PluginManifest> {
         self.plugins
             .iter()
-            .map(|p| (p.name.clone(), p.commands.clone()))
+            .map(|p| PluginManifest {
+                plugin_name: p.name.clone(),
+                commands: p.commands.clone(),
+            })
             .collect()
     }
 }
