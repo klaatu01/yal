@@ -344,6 +344,14 @@ YAL gathers a snapshot of displays → spaces → windows, then focuses the one 
 
 ---
 
+## Contributing
+
+Contributions welcome! Open an issue or PR.
+
+If you would like to help with development, please see the [roadmap](./ROADMAP.md) for ideas.
+
+---
+
 ## License
 
 MIT. Use it, fork it, rebind it, ship it.
