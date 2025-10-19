@@ -7,8 +7,8 @@ use std::path::PathBuf;
 use std::time::Instant;
 
 use crate::protocol::{
-    PluginCommand, PluginExecuteContext, PluginExecuteRequest, PluginExecuteResponse,
-    PluginInitResponse,
+    PluginAPIRequest, PluginCommand, PluginExecuteContext, PluginExecuteRequest,
+    PluginExecuteResponse, PluginInitResponse,
 };
 
 pub struct PluginRef {
@@ -36,7 +36,7 @@ pub struct PluginManifest {
 }
 
 impl LuaPlugin {
-    pub fn new(plugin_ref: PluginRef) -> Result<Self> {
+    pub fn new(plugin_ref: PluginRef, event_tx: kanal::Sender<PluginAPIRequest>) -> Result<Self> {
         let lua = Lua::new();
 
         crate::deps::install_all(
@@ -44,6 +44,7 @@ impl LuaPlugin {
             crate::deps::InstallOptions {
                 vendor_dir: Some(&plugin_ref.path.join("vendor")), // ok if missing
                 http_limits: None,                                 // or Some(HttpLimits { ... })
+                event_tx,
             },
         )?;
 
@@ -72,7 +73,7 @@ return mod
         // Evaluate the bootstrap and capture the returned module table
         let module: Table = lua
             .load(&bootstrap)
-            .set_name(&format!("plugin://{}/{}", plugin_ref.name, "init"))
+            .set_name(format!("plugin://{}/{}", plugin_ref.name, "init"))
             .eval()
             .with_context(|| format!("Failed to load plugin '{}'", plugin_ref.name))?;
 

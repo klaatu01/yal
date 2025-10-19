@@ -12,6 +12,7 @@ mod display;
 mod focus;
 mod ns_watcher;
 mod plugin;
+mod plugin_api;
 mod router;
 mod window;
 
@@ -171,8 +172,12 @@ pub fn run() {
             window::apply_window_size(app.handle(), &cfg);
 
             tauri::async_runtime::block_on(async {
-                let plugin_manager_actor =
-                    plugin::PluginManagerActor::spawn(plugin::PluginManagerActor::new());
+                let (plugin_request_tx, plugin_api_responder) =
+                    plugin_api::PluginAPI::new(app.handle().clone()).spawn();
+
+                let plugin_manager_actor = plugin::PluginManagerActor::spawn(
+                    plugin::PluginManagerActor::new(plugin_request_tx),
+                );
 
                 plugin_manager_actor
                     .ask(plugin::InstallPlugins)
@@ -216,7 +221,7 @@ pub fn run() {
                     ax_actor.clone(),
                 );
 
-                let mut event_tx = event_router.spawn();
+                let event_tx = event_router.spawn();
 
                 config_watcher::ConfigWatcher::spawn(
                     event_tx.clone(),
@@ -235,6 +240,7 @@ pub fn run() {
                 );
                 ns_watcher::SystemWatcher::spawn(event_tx.clone());
 
+                app.manage(plugin_api_responder);
                 app.manage(plugin_manager_actor);
                 app.manage(cmd_actor);
                 app.manage(application_tree_actor);
@@ -244,7 +250,7 @@ pub fn run() {
                 app.manage(theme_manager_actor);
                 app.manage(config_actor);
 
-                event_tx.send(common::Events::RefreshTree).await.unwrap();
+                event_tx.send(common::Events::RefreshTree).unwrap();
             });
             app.set_activation_policy(ActivationPolicy::Accessory);
             Ok(())
@@ -254,7 +260,8 @@ pub fn run() {
             hide_window,
             get_config,
             reload_config,
-            get_theme
+            get_theme,
+            plugin_api::plugin_api_response_handler,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -136,16 +136,12 @@ impl CommandKind {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Popup {
-    pub id: Option<String>, // for refresh/replace semantics
+    pub id: Option<String>,
     pub title: Option<String>,
-    pub width: Option<f32>,  // %; default 75%
-    pub height: Option<f32>, // %; default 75%
-    pub modal: Option<bool>, // default false
-    pub content: Vec<Node>,  // layout + widgets
-    #[serde(default)]
-    pub actions: Vec<Action>, // e.g., footer buttons
-    #[serde(default)]
-    pub hotkeys: Vec<Hotkey>, // global popup shortcuts
+    pub width: Option<f32>,             // %; default 75%
+    pub height: Option<f32>,            // %; default 75%
+    pub content: Vec<Node>,             // layout + widgets
+    pub hotkeys: Option<Vec<Hotkey>>,   // optional hotkeys
     pub ui_schema_version: Option<u32>, // default 1
 }
 
@@ -204,109 +200,50 @@ pub struct Form {
     pub name: Option<String>,
     #[serde(default)]
     pub fields: Vec<Field>,
-    pub submit: Action,
-    pub submit_label: Option<String>,  // default "Submit"
-    pub submit_on_enter: Option<bool>, // default true
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct TextField {
+    pub name: String,
+    pub label: Option<String>,
+    pub placeholder: Option<String>,
+    pub max_length: Option<u32>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct SelectField {
+    pub name: String,
+    pub label: Option<String>,
+    pub options: Vec<OptionKV>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct SliderField {
+    pub name: String,
+    pub label: Option<String>,
+    pub min: f64,
+    pub max: f64,
+    pub step: f64,
+    pub value: Option<f64>,
+    pub show_value: bool,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum Field {
-    Text {
-        name: String,
-        label: Option<String>,
-        placeholder: Option<String>,
-        multiline: Option<bool>,
-        rows: Option<u8>,
-        required: Option<bool>,
-        max_length: Option<u32>,
-    },
-    Number {
-        name: String,
-        label: Option<String>,
-        min: Option<f64>,
-        max: Option<f64>,
-        step: Option<f64>,
-        required: Option<bool>,
-    },
-    Select {
-        name: String,
-        label: Option<String>,
-        options: Vec<OptionKV>,
-        multiple: Option<bool>,
-        required: Option<bool>,
-    },
-    Checkbox {
-        name: String,
-        label: String,
-        checked: Option<bool>,
-    },
-    RadioGroup {
-        name: String,
-        label: Option<String>,
-        options: Vec<OptionKV>,
-        required: Option<bool>,
-    },
-    Slider {
-        name: String,
-        label: Option<String>,
-        min: f64,
-        max: f64,
-        step: f64,
-        value: Option<f64>,
-        show_value: Option<bool>,
-    },
-    Hidden {
-        name: String,
-        value: serde_json::Value,
-    },
+    Text(TextField),
+    Select(SelectField),
+    Slider(SliderField),
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct OptionKV {
-    pub value: String,
     pub label: String,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-#[serde(tag = "kind", rename_all = "snake_case")]
-pub enum Action {
-    /// Execute a plugin command. If `plugin` is None, use the current plugin.
-    Command {
-        plugin: String,
-        command: String,
-        /// Arbitrary payload; for forms, YAL injects {"fields": {name: value, ...}} and merges with this.
-        #[serde(default)]
-        args: serde_json::Value,
-        /// What to do with the UI after the action runs.
-        #[serde(default)]
-        presentation: Presentation, // default: ReplacePopup
-    },
-    OpenUrl {
-        url: String,
-        in_app: Option<bool>,
-    },
-    CopyToClipboard {
-        text: String,
-    },
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-#[serde(rename_all = "snake_case")]
-pub enum Presentation {
-    KeepPopup,    // leave as-is
-    ClosePopup,   // close on success
-    ReplacePopup, // replace with the next popup the command returns (default)
-}
-
-impl Default for Presentation {
-    fn default() -> Self {
-        Presentation::ReplacePopup
-    }
+    pub value: serde_json::Value,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Hotkey {
     pub combo: String, // e.g., "ctrl+enter", "esc"
-    pub action: Action,
+    pub value: OptionKV,
 }

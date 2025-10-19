@@ -1,37 +1,40 @@
 use anyhow::Result;
 use mlua::Lua;
 
+use crate::protocol::PluginAPIRequest;
+
 pub mod base64;
+pub mod db;
 pub mod http;
 pub mod json;
 pub mod log;
+pub mod socket;
+pub mod ui;
 pub mod vendor;
 
-/// Options for installing builtins for a given Lua state (plugin VM).
 pub struct InstallOptions<'a> {
-    /// Optional vendor folder (pure-Lua modules live here).
     pub vendor_dir: Option<&'a std::path::Path>,
-    /// Concurrency / timeout / size limits for HTTP.
     pub http_limits: Option<http::HttpLimits>,
+    pub event_tx: kanal::Sender<PluginAPIRequest>,
 }
 
 /// Install host modules + vendor searcher into a Lua state.
 pub fn install_all(lua: &Lua, opts: InstallOptions) -> Result<()> {
-    // host.json
     json::install_json_preload(lua)?;
 
-    // host.http
     let limits = opts.http_limits.unwrap_or_default();
     let env = http::HttpEnv::new(limits)?;
     http::install_http_preload(lua, env)?;
+    socket::install_socket_preload(lua)?;
 
-    // host.base64
     base64::install_base64_preload(lua)?;
 
-    // host.log
     log::install_log_preload(lua)?;
 
-    // vendor searcher (pure-Lua deps bundled with the plugin)
+    ui::install_ui_preload(lua, opts.event_tx.clone())?;
+
+    db::install_db_preload(lua)?;
+
     if let Some(vendor_dir) = opts.vendor_dir {
         vendor::add_vendor_searcher(lua, vendor_dir)?;
     }

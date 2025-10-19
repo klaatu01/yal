@@ -3,8 +3,6 @@ use core::ptr::NonNull;
 use core_graphics::display::{
     CGDisplayRegisterReconfigurationCallback, CGDisplayRemoveReconfigurationCallback,
 };
-use futures::channel::mpsc;
-use futures::StreamExt;
 use log::{error, info};
 use objc2::rc::Retained;
 use objc2::runtime::ProtocolObject;
@@ -21,11 +19,11 @@ use tauri::async_runtime;
 use tokio::time::sleep;
 
 pub struct SystemWatcher {
-    event_tx: mpsc::UnboundedSender<crate::common::Events>,
+    event_tx: kanal::Sender<crate::common::Events>,
 }
 
 impl SystemWatcher {
-    pub fn spawn(event_tx: mpsc::UnboundedSender<crate::common::Events>) {
+    pub fn spawn(event_tx: kanal::Sender<crate::common::Events>) {
         async_runtime::spawn(async move {
             let watcher = Self { event_tx };
             if let Err(e) = watcher.run().await {
@@ -37,9 +35,9 @@ impl SystemWatcher {
     async fn run(self) -> Result<(), String> {
         info!("Starting SystemWatcher (installing on main runloop)");
 
-        let (raw_tx, mut raw_rx) = mpsc::unbounded::<()>();
+        let (raw_tx, raw_rx) = kanal::unbounded::<()>();
 
-        let (ready_tx, mut ready_rx) = mpsc::unbounded::<Result<(), String>>();
+        let (ready_tx, ready_rx) = kanal::unbounded::<Result<(), String>>();
         std::thread::Builder::new()
             .name("mac-system-watcher-installer".into())
             .spawn(move || unsafe {
@@ -50,10 +48,10 @@ impl SystemWatcher {
                                 MAIN_GUARD.with(|cell| {
                                     *cell.borrow_mut() = Some(guard);
                                 });
-                                let _ = ready_tx.unbounded_send(Ok(()));
+                                let _ = ready_tx.send(Ok(()));
                             }
                             Err(e) => {
-                                let _ = ready_tx.unbounded_send(Err(e));
+                                let _ = ready_tx.send(Err(e));
                             }
                         });
 
@@ -62,37 +60,35 @@ impl SystemWatcher {
                     main_loop.perform_block(Some(mode), Some(&*blk as &Block<_>));
                     main_loop.wake_up();
                 } else {
-                    let _ = ready_tx.unbounded_send(Err(
+                    let _ = ready_tx.send(Err(
                         "CFRunLoop::main() returned None; AppKit not initialized?".into(),
                     ));
                 }
             })
             .map_err(|e| format!("spawn error: {e}"))?;
 
-        match ready_rx.next().await {
-            Some(Ok(())) => info!("SystemWatcher observers installed on main"),
-            Some(Err(e)) => return Err(e),
-            None => return Err("failed to install system watchers".into()),
+        match ready_rx.as_async().recv().await {
+            Ok(Ok(())) => info!("SystemWatcher observers installed on main"),
+            Ok(Err(e)) => return Err(e),
+            _ => return Err("failed to install system watchers".into()),
         }
 
         let debounce_ms = 200u64;
         let mut last: Instant = Instant::now();
 
-        while let Some(()) = raw_rx.next().await {
+        while let Ok(()) = raw_rx.as_async().recv().await {
             if last.elapsed() >= Duration::from_millis(debounce_ms) {
                 last = Instant::now();
                 sleep(Duration::from_millis(1000)).await;
                 if !is_self_frontmost() {
-                    let _ = self
-                        .event_tx
-                        .unbounded_send(crate::common::Events::RefreshTree);
+                    let _ = self.event_tx.send(crate::common::Events::RefreshTree);
                 }
             } else {
                 let tx = self.event_tx.clone();
                 async_runtime::spawn(async move {
                     sleep(Duration::from_millis(debounce_ms + 20)).await;
                     if !is_self_frontmost() {
-                        let _ = tx.unbounded_send(crate::common::Events::RefreshTree);
+                        let _ = tx.send(crate::common::Events::RefreshTree);
                     }
                 });
             }
@@ -142,10 +138,10 @@ thread_local! {
     static MAIN_GUARD: RefCell<Option<SystemObserverGuard>> = const { RefCell::new(None) };
 }
 
-static SINK: OnceCell<Arc<Mutex<mpsc::UnboundedSender<()>>>> = OnceCell::new();
+static SINK: OnceCell<Arc<Mutex<kanal::Sender<()>>>> = OnceCell::new();
 
 unsafe fn install_observers_on_main(
-    raw_tx: mpsc::UnboundedSender<()>,
+    raw_tx: kanal::Sender<()>,
 ) -> Result<SystemObserverGuard, String> {
     let _ = SINK.set(Arc::new(Mutex::new(raw_tx)));
 
@@ -160,7 +156,7 @@ unsafe fn install_observers_on_main(
     let mut add = |name: &NSString| {
         let sink = SINK.get().expect("SINK initialized").clone();
         let block = move |_note: NonNull<NSNotification>| {
-            let _ = sink.lock().unwrap().unbounded_send(());
+            let _ = sink.lock().unwrap().send(());
         };
         let blk: RcBlock<dyn Fn(NonNull<NSNotification>) + 'static> = StackBlock::new(block).copy();
 
@@ -203,6 +199,6 @@ unsafe fn install_observers_on_main(
 
 unsafe extern "C" fn display_cb(_display: u32, _flags: u32, _user: *const std::ffi::c_void) {
     if let Some(sink) = SINK.get() {
-        let _ = sink.lock().unwrap().unbounded_send(());
+        let _ = sink.lock().unwrap().send(());
     }
 }

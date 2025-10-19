@@ -28,14 +28,16 @@ pub struct PluginManager {
     pub config: PluginConfig,
     pub plugins: Vec<Plugin>,
     pub execution_context: Option<PluginExecuteContext>,
+    pub event_tx: kanal::Sender<crate::protocol::PluginAPIRequest>,
 }
 
 impl PluginManager {
-    pub fn new() -> Self {
+    pub fn new(event_tx: kanal::Sender<crate::protocol::PluginAPIRequest>) -> Self {
         Self {
             config: PluginConfig::default(),
             plugins: Vec::new(),
             execution_context: None,
+            event_tx,
         }
     }
 
@@ -97,7 +99,8 @@ impl PluginManager {
                 path: plugin_dir.clone(),
                 config: plugin.config.clone(),
             };
-            let lua_plugin = crate::plugin::LuaPlugin::new(plugin_ref).unwrap();
+            let lua_plugin =
+                crate::plugin::LuaPlugin::new(plugin_ref, self.event_tx.clone()).unwrap();
             let init_response = lua_plugin.initialize().await?;
             let plugin = Plugin {
                 name: plugin.name.clone(),

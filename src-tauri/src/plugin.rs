@@ -1,7 +1,7 @@
 use kameo::{prelude::Message, Actor};
 use yal_plugin::{
     plugin::PluginManifest,
-    protocol::{PluginCommand, PluginExecuteContext, PluginExecuteResponse},
+    protocol::{PluginExecuteContext, PluginExecuteResponse},
     PluginManager,
 };
 
@@ -11,8 +11,8 @@ pub struct PluginManagerActor {
 }
 
 impl PluginManagerActor {
-    pub fn new() -> Self {
-        let manager = PluginManager::new();
+    pub fn new(event_tx: kanal::Sender<yal_plugin::protocol::PluginAPIRequest>) -> Self {
+        let manager = PluginManager::new(event_tx);
         Self { manager }
     }
 }
@@ -78,7 +78,15 @@ impl Message<ExecutePluginCommand> for PluginManagerActor {
             .run_command(&msg.plugin_name, &msg.command_name, msg.args)
             .await
         {
-            Ok(res) => Ok(res),
+            Ok(res) => {
+                log::info!(
+                    "Command {}::{} executed successfully",
+                    msg.plugin_name,
+                    msg.command_name
+                );
+                log::info!("{}", serde_json::to_string_pretty(&res).unwrap());
+                Ok(res)
+            }
             Err(e) => Err(format!(
                 "Failed to execute command '{}::{}': {}",
                 msg.plugin_name, msg.command_name, e

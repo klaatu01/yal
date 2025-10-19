@@ -8,7 +8,8 @@ use std::rc::Rc;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 use yal_core::{
-    Action, AppConfig, Command, CommandKind, Field, Form, Node, Popup, Presentation, Theme,
+    AppConfig, Command, CommandKind, Field, Form, Node, OptionKV, Popup, SelectField, SliderField,
+    TextField, Theme,
 };
 
 use leptos::prelude::AnyView; // type-erased view to unify match/if arms
@@ -194,15 +195,14 @@ fn filter_memoized_commands(
 #[component]
 fn RenderNode(
     node: Node,
-    on_input: Rc<dyn Fn(String, String)>,
-    submit_action: Rc<dyn Fn(Action)>,
+    set_form_values: WriteSignal<std::collections::HashMap<String, serde_json::Value>>,
 ) -> AnyView {
     match node {
         Node::VStack { gap, children } => view! {
             <div class="yal-vstack" style=move || format!("gap:{}rem;", gap.unwrap_or(0.5))>
               {
                 children.into_iter()
-                  .map(|n| view!{ <RenderNode node=n on_input=on_input.clone() submit_action=submit_action.clone() /> })
+                  .map(|n| view!{ <RenderNode node=n set_form_values=set_form_values /> })
                   .collect_view()
               }
             </div>
@@ -212,7 +212,7 @@ fn RenderNode(
             <div class="yal-hstack" style=move || format!("gap:{}rem;", gap.unwrap_or(0.5))>
               {
                 children.into_iter()
-                  .map(|n| view!{ <RenderNode node=n on_input=on_input.clone() submit_action=submit_action.clone() /> })
+                  .map(|n| view!{ <RenderNode node=n set_form_values=set_form_values /> })
                   .collect_view()
               }
             </div>
@@ -223,7 +223,7 @@ fn RenderNode(
                  style=move || format!("grid-template-columns:repeat({cols},1fr);gap:{}rem;", gap.unwrap_or(0.5))>
               {
                 children.into_iter()
-                  .map(|n| view!{ <RenderNode node=n on_input=on_input.clone() submit_action=submit_action.clone() /> })
+                  .map(|n| view!{ <RenderNode node=n set_form_values=set_form_values /> })
                   .collect_view()
               }
             </div>
@@ -236,8 +236,7 @@ fn RenderNode(
         Node::Form(form) => view! {
             <RenderForm
               form=form
-              on_input=on_input.clone()
-              on_submit=submit_action.clone()
+                set_form_values=set_form_values
             />
         }.into_any(),
 
@@ -254,154 +253,235 @@ fn RenderNode(
     }
 }
 
+// --- Select ---
+// --- Select as list (command-palette style) ---
+#[component]
+fn RenderSelectField(
+    field: SelectField,
+    set_form_values: WriteSignal<std::collections::HashMap<String, serde_json::Value>>,
+) -> AnyView {
+    let name = field.name.clone();
+    let options = field.options.clone();
+    let len = options.len();
+
+    // local selection index
+    let (sel, set_sel) = signal(0usize);
+
+    // seed initial value (first option or null)
+    Effect::new({
+        let name = name.clone();
+        let options = options.clone();
+        move |_| {
+            let initial_val = options
+                .first()
+                .map(|o| o.value.clone())
+                .unwrap_or(serde_json::Value::Null);
+            set_form_values.update(|m| {
+                m.entry(name.clone()).or_insert(initial_val);
+            });
+        }
+    });
+
+    // whenever sel changes, update the form value
+    Effect::new({
+        let name = name.clone();
+        let options = options.clone();
+        move |_| {
+            let i = sel.get();
+            if let Some(opt) = options.get(i) {
+                set_form_values.update(|m| {
+                    m.insert(name.clone(), opt.value.clone());
+                });
+            }
+        }
+    });
+
+    // inside RenderSelectField
+    let on_keydown = move |e: web_sys::KeyboardEvent| {
+        let key = e.key();
+        match key.as_str() {
+            // vim-style
+            "j" => {
+                e.prevent_default();
+                e.stop_propagation();
+                if len > 0 {
+                    set_sel.update(|i| *i = (*i + 1).min(len - 1));
+                }
+            }
+            "k" => {
+                e.prevent_default();
+                e.stop_propagation();
+                set_sel.update(|i| *i = i.saturating_sub(1));
+            }
+
+            // arrows still work if the list is focused
+            "ArrowDown" => {
+                e.prevent_default();
+                e.stop_propagation();
+                if len > 0 {
+                    set_sel.update(|i| *i = (*i + 1).min(len - 1));
+                }
+            }
+            "ArrowUp" => {
+                e.prevent_default();
+                e.stop_propagation();
+                set_sel.update(|i| *i = i.saturating_sub(1));
+            }
+
+            // let Enter bubble to the popup's global submit
+            _ => {}
+        }
+    };
+
+    view! {
+      // Use your "results" list look & feel
+      <ul class="results yal-form-control"
+          tabindex="0"
+          role="listbox"
+          aria-label=name.clone()
+          on:keydown=on_keydown
+      >
+        {
+          options.into_iter().enumerate().map({
+            let name = name.clone();
+            move |(i, opt)| {
+            let is_sel = move || sel.get() == i;
+            let label = opt.label.clone();
+            let value = opt.value.clone();
+            view! {
+              <li
+                role="option"
+                aria-selected=move || is_sel().to_string()
+                class:is-selected=move || is_sel()
+                on:mousemove=move |_| { set_sel.set(i); }      // hover moves highlight (optional)
+                on:click={
+                let name = name.clone();
+                move |_| {                             // click selects (and value Effect updates)
+                    set_sel.set(i);
+                    set_form_values.update(|m| { m.insert(name.clone(), value.clone()); });
+                }
+                }
+              >
+                { label.to_lowercase() }
+              </li>
+            }
+          }}).collect_view()
+        }
+      </ul>
+    }
+    .into_any()
+}
+
+#[component]
+fn RenderTextField(
+    field: TextField,
+    set_form_values: WriteSignal<std::collections::HashMap<String, serde_json::Value>>,
+) -> AnyView {
+    let name = field.name.clone();
+    let placeholder = field.placeholder.clone().unwrap_or_default();
+    let initial_value = "";
+
+    // seed initial value once
+    Effect::new({
+        let name = name.clone();
+        move |_| {
+            set_form_values.update(|m| {
+                m.entry(name.clone())
+                    .or_insert(serde_json::Value::String(initial_value.to_string()));
+            });
+        }
+    });
+
+    let on_input = Rc::new(move |name: String, v: String| {
+        set_form_values.update(|m| {
+            m.insert(name, serde_json::Value::String(v));
+        });
+    });
+
+    view! {
+      <input
+        type="text"
+        class="yal-input yal-form-control"
+        name=name.clone()
+        prop:value=initial_value
+        placeholder=placeholder
+        prop:spellcheck=false
+        prop:autocorrect="off"
+        prop:autocapitalize="off"
+        autocomplete="off"
+        on:input=move |ev| {
+          let v = event_target_value(&ev);
+          on_input(name.clone(), v);
+        }
+      />
+    }
+    .into_any()
+}
+
+#[component]
+fn RenderSlider(
+    field: SliderField,
+    set_form_values: WriteSignal<std::collections::HashMap<String, serde_json::Value>>,
+) -> AnyView {
+    let name = field.name.clone();
+    let min = field.min;
+    let max = field.max;
+    let step = field.step;
+    let initial = field.value.unwrap_or(min);
+
+    let on_input = Rc::new(move |name: String, v: String| {
+        if let Ok(val) = v.parse::<f64>() {
+            set_form_values.update(|m| {
+                m.insert(
+                    name,
+                    serde_json::Value::Number(serde_json::Number::from_f64(val).unwrap()),
+                );
+            });
+        }
+    });
+
+    view! {
+        <input
+          type="range"
+          class="yal-form-control"
+          name=name.clone()
+          prop:min=min
+          prop:max=max
+          prop:step=step
+          prop:value=initial
+          on:input=move |ev| {
+            let v = event_target_value(&ev);
+            on_input(name.clone(), v);
+          }
+        />
+    }
+    .into_any()
+}
+
 #[component]
 fn RenderForm(
     form: Form,
-    on_input: Rc<dyn Fn(String, String)>,
-    on_submit: Rc<dyn Fn(Action)>,
+    set_form_values: WriteSignal<std::collections::HashMap<String, serde_json::Value>>,
 ) -> AnyView {
-    let submit_on_enter = form.submit_on_enter.unwrap_or(true);
-
     view! {
-          <form class="yal-form" on:submit=move |ev| {
-              ev.prevent_default();
-              (on_submit)(form.submit.clone());
-            }>
+          <form class="yal-form">
             {
-              form.fields.into_iter().map(|f| match f {
-                Field::Text { name, label, placeholder, multiline, rows, .. } => {
-                  let label_v = label.unwrap_or_else(|| name.clone());
-                  if multiline.unwrap_or(false) {
-                    view!{
-                      <label>{label_v}
-                        <textarea
-                          class="yal-textarea yal-form-control"
-                          rows=rows.unwrap_or(4)
-                          on:input={
-                          let on_input = on_input.clone();
-                          move |e| on_input(name.clone(), event_target_value(&e))
-                          }
-                          placeholder=placeholder.unwrap_or_default()
-                        />
-                      </label>
-                    }.into_any()
-                  } else {
-                    view!{
-                      <label>{label_v}
-                        <input
-                          class="yal-input yal-form-control"
-                          type="text"
-                          placeholder=placeholder.unwrap_or_default()
-                          on:input={
-                          let on_input = on_input.clone();
-                          move |e| on_input(name.clone(), event_target_value(&e))
-                          }
-                          on:keydown={
-                          let on_submit = on_submit.clone();
-                          let submit = form.submit.clone();
-                          move |ke: KeyboardEvent| {
-                            if submit_on_enter && ke.key() == "Enter" {
-                              ke.prevent_default();
-                              on_submit(submit.clone());
-                            }
-                          }
-                          }
-                        />
-                      </label>
-                    }.into_any()
+              form.fields.into_iter().map(|field| {
+                match field {
+                  Field::Text(f) => {
+                    view! { <RenderTextField field=f set_form_values=set_form_values /> }.into_any()
+                  }
+                  Field::Select(f) => {
+                    view! { <RenderSelectField field=f set_form_values=set_form_values /> }.into_any()
+                  }
+                  Field::Slider(f) => {
+                    view! { <RenderSlider field=f set_form_values=set_form_values /> }.into_any()
                   }
                 }
-
-                // -------- Slider support + h/l nudging ----------
-    Field::Slider { name, label, min, max, step, value, show_value } => {
-      let initial = value.unwrap_or(min);
-      let (cur, set_cur) = signal(initial);
-      let stp = step;
-      let mn = min;
-      let mx = max;
-
-      {
-        let name = name.clone();
-        let on_input = on_input.clone();
-        Effect::new(move |_| {
-          on_input(name.clone(), initial.to_string());
-        });
-      }
-
-      let fmt_val = move || {
-          let v = cur.get();
-          if (v - v.round()).abs() < 1e-9 { format!("{:.0}%", v) }
-          else { format!("{}%", v) }
-      };
-
-      // helper: adjust and emit input
-      let adjust = {
-        let name = name.clone();
-        let on_input = on_input.clone();
-        move |delta: f64, elem: web_sys::HtmlInputElement| {
-          let mut v = cur.get() + delta;
-          if v < mn { v = mn; }
-          if v > mx { v = mx; }
-          set_cur.set(v);
-          elem.set_value(&v.to_string());
-          if let Ok(ev) = web_sys::Event::new("input") {
-            let _ = elem.dispatch_event(&ev);
-          }
-          on_input(name.clone(), v.to_string());
-        }
-      };
-
-      view! {
-        <label>
-          { label.clone().unwrap_or_else(|| name.clone()) }
-          <div class="yal-slider-row">
-            <input
-              class="yal-slider yal-form-control"
-              type="range"
-              prop:min=mn
-              prop:max=mx
-              prop:step=stp
-              prop:value=cur.get()
-              on:input={
-                let on_input = on_input.clone();
-                move |e| {
-                  if let Ok(v) = event_target_value(&e).parse::<f64>() {
-                    set_cur.set(v);
-                    on_input(name.clone(), v.to_string());
-                  }
-                }
-              }
-              on:keydown=move |ke: KeyboardEvent| {
-                let key = ke.key();
-                if key == "h" || key == "l" {
-                  if let Some(t) = ke.target() {
-                    if let Ok(input) = t.dyn_into::<web_sys::HtmlInputElement>() {
-                      ke.prevent_default();
-                      let delta = if key == "h" { -stp } else { stp };
-                      adjust(delta, input);
-                    }
-                  }
-                }
-              }
-            />
-            {
-              move || if show_value.unwrap_or(true) {
-                view!{ <span class="yal-slider-val">{ fmt_val() }</span> }.into_any()
-              } else {
-                view!{ <span></span> }.into_any()
-              }
-            }
-          </div>
-        </label>
-      }.into_any()
-    }
-
-                // TODO: Number / Select / Checkbox / RadioGroup / Hidden
-                _ => view!{ <div>"unsupported field"</div> }.into_any(),
               }).collect_view()
             }
           </form>
-        }
+    }
     .into_any()
 }
 
@@ -503,58 +583,18 @@ fn nudge_active_slider(delta: f64) {
 
 /* -------------------------------- Popup shell ------------------------------- */
 
+#[derive(Serialize, Deserialize)]
+pub struct PopupReponseArgs {
+    id: String,
+    value: serde_json::Value,
+}
+
 #[component]
 fn PopupView(popup: ReadSignal<Option<Popup>>, set_popup: WriteSignal<Option<Popup>>) -> AnyView {
     let p = popup.get().unwrap();
     let (form_values, set_form_values) =
         signal(std::collections::HashMap::<String, serde_json::Value>::new());
 
-    // cloneable handlers
-    let on_input = Rc::new(move |name: String, v: String| {
-        set_form_values.update(|m| {
-            m.insert(name, serde_json::Value::String(v));
-        });
-    });
-
-    let submit_action = Rc::new(move |action: Action| {
-        let args = match &action {
-            Action::Command { args, .. } => args.clone(),
-            _ => serde_json::Value::Null,
-        };
-        let fields = serde_json::to_value(form_values.get()).unwrap_or(serde_json::json!({}));
-        let merged = match args {
-            serde_json::Value::Object(mut m) => {
-                m.insert("fields".into(), fields);
-                serde_json::Value::Object(m)
-            }
-            _ => serde_json::json!({ "fields": fields }),
-        };
-
-        if let Action::Command {
-            plugin,
-            command,
-            presentation,
-            ..
-        } = action
-        {
-            let cmd = Command::Plugin {
-                plugin_name: plugin,
-                command_name: command,
-                args: Some(merged),
-            };
-            spawn_local(async move {
-                let args = serde_wasm_bindgen::to_value(&RunCmdArgs { cmd }).unwrap();
-                let _ = invoke("run_cmd", args).await;
-            });
-            match presentation {
-                Presentation::ClosePopup => set_popup.set(None),
-                Presentation::KeepPopup | Presentation::ReplacePopup => { /* backend will emit show/close */
-                }
-            }
-        }
-    });
-
-    let _submit_action = submit_action.clone();
     // Popup-level key handling: Escape, Enter, ctrl+n/p, h/l, slider nudge
     let popup_keydown = move |e: web_sys::KeyboardEvent| {
         let key = e.key();
@@ -568,60 +608,36 @@ fn PopupView(popup: ReadSignal<Option<Popup>>, set_popup: WriteSignal<Option<Pop
 
                 // Prefer submitting the first <Form> (this path merges the current slider value via `submit_action`)
                 if let Some(p) = popup.get() {
-                    if let Some(submit) = find_first_form_submit(&p.content) {
-                        let submit_action_enter = _submit_action.clone();
-                        (submit_action_enter)(submit);
-                        return;
-                    }
-
-                    // Fallback: if no form exists, use the first footer action (old behavior)
-                    if let Some(Action::Command {
-                        plugin,
-                        command,
-                        args,
-                        ..
-                    }) = p.actions.first().cloned()
-                    {
-                        let cmd = Command::Plugin {
-                            plugin_name: plugin,
-                            command_name: command,
-                            args: Some(args),
-                        };
-                        spawn_local(async move {
-                            let args = serde_wasm_bindgen::to_value(&RunCmdArgs { cmd }).unwrap();
-                            let _ = invoke("run_cmd", args).await;
-                        });
-                    }
+                    spawn_local(async move {
+                        let values = form_values.get();
+                        let args = serde_wasm_bindgen::to_value(&PopupReponseArgs {
+                            id: p.id.unwrap(),
+                            value: serde_json::Value::Object(values.into_iter().collect()),
+                        })
+                        .unwrap();
+                        let _ = invoke("plugin_api_response_handler", args).await;
+                        set_popup.set(None);
+                    });
                 }
             }
 
             // ctrl+n / ctrl+p → move focus
             "n" if e.ctrl_key() => {
-                e.prevent_default();
                 focus_move(1);
             }
             "p" if e.ctrl_key() => {
-                e.prevent_default();
                 focus_move(-1);
             }
 
             // h / l → either nudge slider if focused, else move focus
             "h" => {
                 if active_is_range().is_some() {
-                    e.prevent_default();
                     nudge_active_slider(-1.0);
-                } else {
-                    e.prevent_default();
-                    focus_move(-1);
                 }
             }
             "l" => {
                 if active_is_range().is_some() {
-                    e.prevent_default();
                     nudge_active_slider(1.0);
-                } else {
-                    e.prevent_default();
-                    focus_move(1);
                 }
             }
 
@@ -629,23 +645,6 @@ fn PopupView(popup: ReadSignal<Option<Popup>>, set_popup: WriteSignal<Option<Pop
             _ => {}
         }
     };
-
-    // Find the first Form node in the popup (recurses through layout) and return its submit action.
-    fn find_first_form_submit(nodes: &[Node]) -> Option<Action> {
-        use Node::*;
-        for n in nodes {
-            match n {
-                Form(f) => return Some(f.submit.clone()),
-                VStack { children, .. } | HStack { children, .. } | Grid { children, .. } => {
-                    if let Some(a) = find_first_form_submit(children) {
-                        return Some(a);
-                    }
-                }
-                _ => {}
-            }
-        }
-        None
-    }
 
     Effect::new(move |_| {
         raf_focus_first_form_control();
@@ -676,39 +675,14 @@ fn PopupView(popup: ReadSignal<Option<Popup>>, set_popup: WriteSignal<Option<Pop
           <div class="yal-popup-body">
             {
               p.content.iter().cloned()
-                .map(|n| view!{ <RenderNode node=n on_input=on_input.clone() submit_action=submit_action.clone() /> })
+                .map(|n| view!{ <RenderNode node=n set_form_values=set_form_values.clone() /> })
                 .collect_view()
-            }
-          </div>
-          <div class="yal-popup-footer">
-            {
-              p.actions.iter().cloned().map(|a| {
-                // Pretty labels for quick-set volume: show "0%/50%/100%" if args.fields.vol present
-                let label = match &a {
-                  Action::Command{ args, command, .. } => {
-                    if let serde_json::Value::Object(map) = args {
-                      if let Some(serde_json::Value::Object(fields)) = map.get("fields") {
-                        if let Some(v) = fields.get("vol") {
-                          if let Some(n) = v.as_f64().or_else(|| v.as_i64().map(|i| i as f64)) {
-                            format!("{}%", n.round() as i64)
-                          } else { command.clone() }
-                        } else { command.clone() }
-                      } else { command.clone() }
-                    } else { command.clone() }
-                  }
-                  Action::OpenUrl{ url, .. } => format!("Open {}", url),
-                  Action::CopyToClipboard{ .. } => "Copy".into(),
-                };
-                let submit_action_btn = submit_action.clone();
-                view!{
-                  <button class="yal-btn yal-form-control" on:click=move |_| submit_action_btn(a.clone())>{label}</button>
-                }
-              }).collect_view()
             }
           </div>
         </div>
       </div>
-    }.into_any()
+    }
+    .into_any()
 }
 
 /* ---------------------------------- App ------------------------------------- */

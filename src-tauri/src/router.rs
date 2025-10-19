@@ -1,4 +1,3 @@
-use futures::StreamExt;
 use kameo::actor::ActorRef;
 use tauri::Emitter;
 
@@ -37,10 +36,11 @@ impl EventRouter {
         }
     }
 
-    pub fn spawn(self) -> futures::channel::mpsc::UnboundedSender<crate::common::Events> {
-        let (event_tx, mut event_rx) = futures::channel::mpsc::unbounded();
+    pub fn spawn(self) -> kanal::Sender<Events> {
+        let (event_tx, event_rx) = kanal::unbounded::<Events>();
         tauri::async_runtime::spawn(async move {
-            while let Some(event) = event_rx.next().await {
+            let event_rx = event_rx.as_async();
+            while let Ok(event) = event_rx.recv().await {
                 match event {
                     Events::ReloadConfig => {
                         log::info!("EventRouter: ReloadConfig event received");

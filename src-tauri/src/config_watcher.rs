@@ -1,21 +1,21 @@
 use std::path::Path;
 use std::time::Duration;
 
-use futures::{SinkExt, StreamExt};
+use futures::StreamExt;
 use notify::RecursiveMode;
 use notify_debouncer_mini::{
     new_debouncer, DebounceEventResult, DebouncedEvent, DebouncedEventKind,
 };
 
 pub struct ConfigWatcher {
-    event_tx: futures::channel::mpsc::UnboundedSender<crate::common::Events>,
+    event_tx: kanal::Sender<crate::common::Events>,
     file: String,
     event: crate::common::Events,
 }
 
 impl ConfigWatcher {
     pub fn spawn(
-        event_tx: futures::channel::mpsc::UnboundedSender<crate::common::Events>,
+        event_tx: kanal::Sender<crate::common::Events>,
         file: impl Into<String>,
         event: crate::common::Events,
     ) {
@@ -73,6 +73,7 @@ impl ConfigWatcher {
 
     async fn send_event(&mut self) -> Result<(), String> {
         self.event_tx
+            .as_async()
             .send(self.event.clone())
             .await
             .map_err(|e| format!("Failed to send reload event: {}", e))
