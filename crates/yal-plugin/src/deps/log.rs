@@ -31,6 +31,6 @@ pub fn install_log_preload(lua: &Lua) -> LuaResult<()> {
         Ok(m)
     })?;
 
-    preload.set("host.log", loader)?;
+    preload.set("yal.log", loader)?;
     Ok(())
 }

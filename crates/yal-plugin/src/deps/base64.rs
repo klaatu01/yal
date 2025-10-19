@@ -67,6 +67,6 @@ pub fn install_base64_preload(lua: &Lua) -> LuaResult<()> {
         Ok(m)
     })?;
 
-    preload.set("host.base64", loader)?;
+    preload.set("yal.base64", loader)?;
     Ok(())
 }

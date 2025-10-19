@@ -17,6 +17,6 @@ pub fn install_ui_preload(lua: &Lua, event_tx: kanal::Sender<PluginAPIRequest>) 
         Ok(m)
     })?;
 
-    preload.set("host.ui", loader)?;
+    preload.set("yal.ui", loader)?;
     Ok(())
 }
