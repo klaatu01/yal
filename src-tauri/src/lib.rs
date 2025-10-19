@@ -1,6 +1,5 @@
-use futures::SinkExt;
 use kameo::{actor::ActorRef, Actor};
-use tauri::{ActivationPolicy, Manager, WebviewEvent, WindowEvent};
+use tauri::{ActivationPolicy, Manager, WindowEvent};
 
 mod application_tree;
 mod ax;
@@ -24,7 +23,7 @@ use crate::{
     },
 };
 
-use config::load_config;
+use yal_config::load_config;
 use yal_core::{AppConfig, Theme};
 
 #[tauri::command]
@@ -168,7 +167,7 @@ pub fn run() {
                     tauri_plugin_macos_permissions::request_screen_recording_permission().await;
                 }
             });
-            let cfg = load_config();
+            let cfg = load_config(config::config_path().as_path());
             window::apply_window_size(app.handle(), &cfg);
 
             tauri::async_runtime::block_on(async {
@@ -200,7 +199,6 @@ pub fn run() {
                 );
 
                 let ax_actor = AXActor::spawn(AXActor::new(
-                    app.handle().clone(),
                     display_manager_actor.clone(),
                     focus_manager_actor.clone(),
                     application_tree_actor.clone(),
@@ -225,17 +223,17 @@ pub fn run() {
 
                 config_watcher::ConfigWatcher::spawn(
                     event_tx.clone(),
-                    "config.toml",
+                    "config.lua",
                     common::Events::ReloadConfig,
                 );
                 config_watcher::ConfigWatcher::spawn(
                     event_tx.clone(),
-                    "plugins.toml",
+                    "plugins.lua",
                     common::Events::ReloadPlugins,
                 );
                 config_watcher::ConfigWatcher::spawn(
                     event_tx.clone(),
-                    "themes.toml",
+                    "themes.lua",
                     common::Events::RefreshTree,
                 );
                 ns_watcher::SystemWatcher::spawn(event_tx.clone());

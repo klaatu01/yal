@@ -8,7 +8,7 @@ use std::rc::Rc;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 use yal_core::{
-    AppConfig, Command, CommandKind, Field, Form, Node, OptionKV, Popup, SelectField, SliderField,
+    AppConfig, Command, CommandKind, Field, Form, Node, Popup, SelectField, SliderField,
     TextField, Theme,
 };
 

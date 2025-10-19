@@ -1,6 +1,6 @@
 use nanoid::nanoid;
 use serde::{Deserialize, Serialize};
-use yal_core::{Form, Popup};
+use yal_core::Popup;
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct PluginCommand {

@@ -13,7 +13,7 @@ A tiny, no-nonsense app launcher. Press `⌘ Space`, type a few letters, hit `En
 - **Global hotkey**: toggles with `⌘ Space` (configurable in code).
 - **Fuzzy search**: type fragments like `gc` → finds “Google Chrome”.
 - **Multi‑monitor aware**: opens on the active display; plays nicely with separate Spaces.
-- **Hot‑reload config**: edit `config.toml` and it live‑applies (colors, fonts, size).
+- **Hot‑reload config**: edit `config.lua` and it live‑applies (colors, fonts, size).
 - **Theme filtering & switching**: press `Ctrl‑T` to filter themes by name and apply instantly.
 - **Lightweight**: ~20 MB RAM, instant launch.
 - **Window switching**: list running app windows and jump to them (across Spaces).
@@ -122,63 +122,70 @@ Spotlight also binds `⌘ Space`. Pick one:
 - `Ctrl‑f` — toggle **Switch** (windows) mode
 - `Ctrl‑t` — toggle **Themes** mode (filter themes; `Enter` applies the highlighted theme)
 
-> Theme switching is instant. Applied themes do not persist between restarts, you will need to hard code a chosen theme in `config.toml`.
+> Theme switching is instant. Applied themes do not persist between restarts, you will need to hard code a chosen theme in `config.lua`.
 
 ---
 
 ## Configuration
 
-YAL reads TOML files from your XDG config directory and hot‑reloads on change.
+YAL reads Lua files from your XDG config directory and hot‑reloads on change.
 
 **Locations**
 
-- `~/.config/yal/config.toml` (main app config)
-- `~/.config/yal/themes.toml` (named theme definitions)
+- `~/.config/yal/config.lua` (main app config)
+- `~/.config/yal/themes.lua` (named theme definitions)
 
 ### Quick start: example files
 
-**`~/.config/yal/themes.toml`**
-```toml
-# Define one or more named themes. Keys are color hex strings.
-# You can reference any section name here from `config.toml`'s `theme` key.
+**`~/.config/yal/themes.lua`**
+```lua
+-- Define one or more named themes. Keys are color hex strings.
+-- You can reference any section name here from `config.lua`'s `theme` key.
 
-[catppuccin-mocha]
-bg_color      = "#1e1e2e"
-fg_color      = "#45475a"
-bg_font_color = "#cdd6f4"
-fg_font_color = "#cdd6f4"
-
-[custom]
-bg_color      = "#0f0f14"
-fg_color      = "#2f81f7"
-bg_font_color = "#e6e6e6"
-fg_font_color = "#ffffff"
+return {
+    {
+       name = "catppuccin-mocha"
+       bg_color      = "#1e1e2e"
+       fg_color      = "#45475a"
+       bg_font_color = "#cdd6f4"
+       fg_font_color = "#cdd6f4"
+    },
+    {
+       name = "custom",
+       bg_color      = "#0f0f14"
+       fg_color      = "#2f81f7"
+       bg_font_color = "#e6e6e6"
+       fg_font_color = "#ffffff"
+    }
+}
 ```
 
-**`~/.config/yal/config.toml`**
-```toml
-# Pick a theme by name (must exist in themes.toml).
-theme = "catppuccin-mocha"
-
-[font]
-font      = "Fira Code"   # CSS font stack allowed
-font_size = 12.0          # px
-
-[window]
-w_width     = 400.0       # logical points
-w_height    = 250.0
-align_h     = "center"    # left | center | right
-align_v     = "center"    # top  | center | bottom
-line_height = 0.8
-padding     = 8
-w_radius    = 0
+**`~/.config/yal/config.lua`**
+```lua
+-- Pick a theme by name (must exist in themes.lua).
+return {
+    theme = "catppuccin-mocha"
+    font = {
+        font      = "Fira Code"   -- CSS font stack allowed
+        font_size = 12.0          -- px
+    },
+    window = {
+        w_width     = 400.0       -- logical points
+        w_height    = 250.0
+        align_h     = "center"    -- left | center | right
+        align_v     = "center"    -- top  | center | bottom
+        line_height = 0.8
+        padding     = 8
+        w_radius    = 0
+    }
+}
 ```
 
 > Any change you save will be applied live. If you change `theme = ...`, the UI updates immediately. `Ctrl‑T` in YAL lets you preview a theme only.
 
 ### Config reference
 
-#### Theme (from `themes.toml`)
+#### Theme (from `themes.lua`)
 
 ![yal-theme](https://github.com/user-attachments/assets/49cb1c21-b55a-4b4e-9587-2d3aa750978c)
 
@@ -192,16 +199,16 @@ Each **theme** is a `[name]` table with these keys:
 | `bg_font_color`  | string | Text color for normal rows (on `bg_color`).            |
 | `fg_font_color`  | string | Text color on the highlighted row (on `fg_color`).     |
 
-> Reference a theme in `config.toml` via `theme = "<name>"`.
+> Reference a theme in `config.lua` via `theme = "<name>"`.
 
-#### Font (`[font]` in `config.toml`)
+#### Font (`[font]` in `config.lua`)
 
 | Key          | Type   | Description                                                     |
 |--------------|--------|-----------------------------------------------------------------|
 | `font`       | string | CSS `font-family` stack applied to the UI.                      |
 | `font_size`  | float  | Base font size in **px** (e.g., `14.0`).                        |
 
-#### Window (`[window]` in `config.toml`)
+#### Window (`[window]` in `config.lua`)
 
 | Key           | Type   | Description                                                                 |
 |---------------|--------|-----------------------------------------------------------------------------|
@@ -221,20 +228,24 @@ YAL supports lightweight **Lua** plugins. Plugins can add commands (e.g. Spotify
 
 ### Where plugins live
 
-- **Config file:** `~/.config/yal/plugins.toml`  
+- **Config file:** `~/.config/yal/plugins.lua`  
 - **Install directory:** `~/.local/share/yal/plugins/<plugin-name>/` (git-cloned here)
 
 YAL's built in plugin manager will hot-load plugins from the config file when changes are made (no need to restart YAL).
 
 ### Quick start
 
-Create `~/.config/yal/plugins.toml`:
+Create `~/.config/yal/plugins.lua`:
 
 Yal uses the format `<plugin-name> = "<github-user>/<repo>"` to clone from GitHub.
 
-```toml
-[plugins]
-spotify = "klaatu01/yal-spotify-plugin"
+```lua
+return { 
+    {
+        name = "spotify",
+        git = "klaatu01/yal-spotify-plugin"
+    }
+}
 ```
 
 ### Writing a plugin (Lua)

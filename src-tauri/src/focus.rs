@@ -20,7 +20,6 @@ type AXUIElementRef = *mut __AXUIElement;
 #[link(name = "ApplicationServices", kind = "framework")]
 extern "C" {
     fn AXUIElementCreateApplication(pid: i32) -> AXUIElementRef;
-    fn AXUIElementCreateSystemWide() -> AXUIElementRef; // ← add this
     fn AXUIElementCopyAttributeValue(
         element: AXUIElementRef,
         attribute: CFStringRef,

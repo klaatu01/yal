@@ -7255,11 +7255,20 @@ dependencies = [
  "tauri-plugin-opener",
  "tauri-plugin-single-instance",
  "tokio",
- "toml 0.9.8",
  "walkdir",
+ "yal-config",
  "yal-core",
  "yal-plugin",
  "yal-theme",
+]
+
+[[package]]
+name = "yal-config"
+version = "0.0.0"
+dependencies = [
+ "anyhow",
+ "mlua",
+ "serde",
 ]
 
 [[package]]
@@ -7269,7 +7278,6 @@ dependencies = [
  "anyhow",
  "serde",
  "serde_json",
- "toml 0.9.8",
 ]
 
 [[package]]
@@ -7290,7 +7298,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tokio",
- "toml 0.9.8",
+ "yal-config",
  "yal-core",
 ]
 

@@ -18,17 +18,11 @@ pub struct AXActor {
 
 impl AXActor {
     pub fn new(
-        app: tauri::AppHandle,
         display_manager_ref: ActorRef<DisplayManagerActor>,
         focus_manager_ref: ActorRef<FocusManagerActor>,
         application_tree_ref: ActorRef<ApplicationTreeActor>,
     ) -> Self {
-        let ax = AX::new(
-            app,
-            display_manager_ref,
-            focus_manager_ref,
-            application_tree_ref,
-        );
+        let ax = AX::new(display_manager_ref, focus_manager_ref, application_tree_ref);
         Self { ax }
     }
 }
@@ -48,7 +42,6 @@ impl std::fmt::Display for DisplaySpace {
 }
 
 pub struct AX {
-    app: tauri::AppHandle,
     pub lightsky: Lightsky,
     pub application_tree_ref: ActorRef<ApplicationTreeActor>,
     display_manager_ref: ActorRef<DisplayManagerActor>,
@@ -58,7 +51,6 @@ pub struct AX {
 
 impl AX {
     pub fn new(
-        app: tauri::AppHandle,
         display_manager_ref: ActorRef<DisplayManagerActor>,
         focus_manager_ref: ActorRef<FocusManagerActor>,
         application_tree_ref: ActorRef<ApplicationTreeActor>,
@@ -66,7 +58,6 @@ impl AX {
         let lightsky = Lightsky::new().expect("Failed to initialize Lightsky");
         let mc = MissionControlEmu::new();
         Self {
-            app,
             lightsky,
             application_tree_ref,
             display_manager_ref,
