@@ -3,9 +3,11 @@ use mlua::prelude::LuaSerdeExt;
 use mlua::{Function, Lua, Table, Value as LuaValue};
 use std::path::PathBuf;
 
+use std::sync::Arc;
 #[cfg(debug_assertions)]
 use std::time::Instant;
 
+use crate::backend::Backend;
 use crate::protocol::{
     PluginAPIRequest, PluginCommand, PluginExecuteContext, PluginExecuteRequest,
     PluginExecuteResponse, PluginInitResponse,
@@ -36,7 +38,7 @@ pub struct PluginManifest {
 }
 
 impl LuaPlugin {
-    pub fn new(plugin_ref: PluginRef, event_tx: kanal::Sender<PluginAPIRequest>) -> Result<Self> {
+    pub fn new<T: Backend>(plugin_ref: PluginRef, backend: Arc<T>) -> Result<Self> {
         let lua = Lua::new();
 
         crate::deps::install_all(
@@ -44,8 +46,8 @@ impl LuaPlugin {
             crate::deps::InstallOptions {
                 vendor_dir: Some(&plugin_ref.path.join("vendor")), // ok if missing
                 http_limits: None,                                 // or Some(HttpLimits { ... })
-                event_tx,
             },
+            backend,
         )?;
 
         let script_dir = plugin_ref.path;

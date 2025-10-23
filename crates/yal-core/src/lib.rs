@@ -143,13 +143,31 @@ impl CommandKind {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct Popup {
-    pub id: Option<String>,
+pub struct Prompt {
     pub title: Option<String>,
     pub width: Option<f32>,             // %; default 75%
     pub height: Option<f32>,            // %; default 75%
     pub content: Vec<Node>,             // layout + widgets
     pub ui_schema_version: Option<u32>, // default 1
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct PromptRequest {
+    pub id: String,
+    pub prompt: Prompt,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct FrontendResult {
+    pub id: String,
+    pub response: serde_json::Value,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum PromptResponse {
+    Submit { values: serde_json::Value },
+    State { values: serde_json::Value },
+    Cancel,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -363,4 +381,10 @@ impl<'de> Deserialize<'de> for Shortcut {
 
         deserializer.deserialize_map(ShortcutVisitor)
     }
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct FrontendRequest<T: Send + Serialize + Clone + 'static> {
+    pub id: String,
+    pub data: T,
 }

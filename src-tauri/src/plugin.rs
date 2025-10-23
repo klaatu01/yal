@@ -1,25 +1,26 @@
 use kameo::{prelude::Message, Actor};
 use yal_plugin::{
+    backend::Backend,
     plugin::PluginManifest,
     protocol::{PluginExecuteContext, PluginExecuteResponse},
     PluginManager,
 };
 
 #[derive(Actor)]
-pub struct PluginManagerActor {
-    pub manager: PluginManager,
+pub struct PluginManagerActor<T: Backend> {
+    pub manager: PluginManager<T>,
 }
 
-impl PluginManagerActor {
-    pub fn new(event_tx: kanal::Sender<yal_plugin::protocol::PluginAPIRequest>) -> Self {
-        let manager = PluginManager::new(event_tx);
+impl<T: Backend> PluginManagerActor<T> {
+    pub fn new(backend: T) -> Self {
+        let manager = PluginManager::new(backend);
         Self { manager }
     }
 }
 
 pub struct InstallPlugins;
 
-impl Message<InstallPlugins> for PluginManagerActor {
+impl<T: Backend> Message<InstallPlugins> for PluginManagerActor<T> {
     type Reply = Result<(), String>;
 
     async fn handle(
@@ -37,7 +38,7 @@ impl Message<InstallPlugins> for PluginManagerActor {
 
 pub struct LoadPlugins;
 
-impl Message<LoadPlugins> for PluginManagerActor {
+impl<T: Backend> Message<LoadPlugins> for PluginManagerActor<T> {
     type Reply = Vec<PluginManifest>;
 
     async fn handle(
@@ -60,7 +61,7 @@ pub struct ExecutePluginCommand {
     pub args: Option<serde_json::Value>,
 }
 
-impl Message<ExecutePluginCommand> for PluginManagerActor {
+impl<T: Backend> Message<ExecutePluginCommand> for PluginManagerActor<T> {
     type Reply = Result<PluginExecuteResponse, String>;
 
     async fn handle(
@@ -95,7 +96,7 @@ impl Message<ExecutePluginCommand> for PluginManagerActor {
     }
 }
 
-impl Message<PluginExecuteContext> for PluginManagerActor {
+impl<T: Backend> Message<PluginExecuteContext> for PluginManagerActor<T> {
     type Reply = ();
 
     async fn handle(

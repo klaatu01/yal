@@ -6,6 +6,7 @@ use crate::{
     cmd::theme::ThemeManagerActor,
     common::Events,
     config::{ConfigActor, GetConfig, ReloadConfig},
+    plugin_backend::PluginBackend,
 };
 
 pub struct EventRouter {
@@ -14,7 +15,7 @@ pub struct EventRouter {
     theme_ref: ActorRef<ThemeManagerActor>,
     application_tree_ref: ActorRef<crate::application_tree::ApplicationTreeActor>,
     ax_ref: ActorRef<crate::ax::AXActor>,
-    plugin_manager_ref: ActorRef<crate::plugin::PluginManagerActor>,
+    plugin_manager_ref: ActorRef<crate::plugin::PluginManagerActor<PluginBackend>>,
 }
 
 impl EventRouter {
@@ -23,7 +24,7 @@ impl EventRouter {
         config_ref: ActorRef<ConfigActor>,
         theme_ref: ActorRef<ThemeManagerActor>,
         application_tree_ref: ActorRef<ApplicationTreeActor>,
-        plugin_manager_ref: ActorRef<crate::plugin::PluginManagerActor>,
+        plugin_manager_ref: ActorRef<crate::plugin::PluginManagerActor<PluginBackend>>,
         ax_ref: ActorRef<crate::ax::AXActor>,
     ) -> Self {
         Self {

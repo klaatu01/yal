@@ -1,6 +1,6 @@
 use nanoid::nanoid;
 use serde::{Deserialize, Serialize};
-use yal_core::Popup;
+use yal_core::{Prompt, PromptResponse};
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct PluginCommand {
@@ -27,8 +27,6 @@ pub struct PluginInitResponse {
 #[derive(Serialize, Deserialize)]
 pub struct PluginExecuteResponse {
     pub hide: bool,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub popup: Option<Popup>,
 }
 
 #[derive(Serialize)]
@@ -67,12 +65,12 @@ pub struct Window {
 pub struct PluginAPIRequest {
     pub id: String,
     pub payload: PluginAPIEvent,
-    pub responder: kanal::Sender<serde_json::Value>,
+    pub responder: kanal::Sender<PromptResponse>,
 }
 
 impl PluginAPIRequest {
-    pub fn new(payload: PluginAPIEvent) -> (Self, kanal::Receiver<serde_json::Value>) {
-        let (tx, rx) = kanal::bounded::<serde_json::Value>(1);
+    pub fn new(payload: PluginAPIEvent) -> (Self, kanal::Receiver<PromptResponse>) {
+        let (tx, rx) = kanal::unbounded::<PromptResponse>();
         (
             PluginAPIRequest {
                 id: nanoid!(21),
@@ -86,5 +84,5 @@ impl PluginAPIRequest {
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub enum PluginAPIEvent {
-    Prompt(Popup),
+    Prompt(Prompt),
 }
