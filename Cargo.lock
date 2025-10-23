@@ -7333,13 +7333,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "yal-plugin-protocol"
-version = "0.0.0"
-dependencies = [
- "nanoid",
-]
-
-[[package]]
 name = "yal-theme"
 version = "0.0.0"
 dependencies = [
@@ -7361,7 +7354,6 @@ dependencies = [
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
- "whirlwind",
  "yal-core",
 ]
 
