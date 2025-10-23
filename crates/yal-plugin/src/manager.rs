@@ -1,10 +1,11 @@
-use std::path::PathBuf;
+use std::{path::PathBuf, sync::Arc};
 
 use anyhow::{Context, Result};
 use git2::Repository;
 use tokio::fs;
 
 use crate::{
+    backend,
     manager::config::PluginConfig,
     plugin::{Plugin, PluginManifest},
     protocol::{PluginExecuteContext, PluginExecuteResponse},
@@ -24,20 +25,20 @@ pub fn plugins_dir() -> PathBuf {
     dir
 }
 
-pub struct PluginManager {
+pub struct PluginManager<T: backend::Backend> {
     pub config: PluginConfig,
     pub plugins: Vec<Plugin>,
     pub execution_context: Option<PluginExecuteContext>,
-    pub event_tx: kanal::Sender<crate::protocol::PluginAPIRequest>,
+    pub backend: Arc<T>,
 }
 
-impl PluginManager {
-    pub fn new(event_tx: kanal::Sender<crate::protocol::PluginAPIRequest>) -> Self {
+impl<T: backend::Backend> PluginManager<T> {
+    pub fn new(backend: T) -> Self {
         Self {
             config: PluginConfig::default(),
             plugins: Vec::new(),
             execution_context: None,
-            event_tx,
+            backend: Arc::new(backend),
         }
     }
 
@@ -98,8 +99,8 @@ impl PluginManager {
                 path: plugin_dir.clone(),
                 config: plugin.config.clone(),
             };
-            let lua_plugin =
-                crate::plugin::LuaPlugin::new(plugin_ref, self.event_tx.clone()).unwrap();
+            let lua_plugin = crate::plugin::LuaPlugin::new(plugin_ref, self.backend.clone())
+                .with_context(|| format!("Failed loading plugin '{}'", plugin.name))?;
             let init_response = lua_plugin.initialize().await?;
             let plugin = Plugin {
                 name: plugin.name.clone(),

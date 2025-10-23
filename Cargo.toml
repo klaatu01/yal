@@ -16,6 +16,7 @@ yal-core = { path = "./crates/yal-core" }
 fuzzy-matcher = "0.3.7"
 serde_json = "1.0.145"
 log = "0.4.28"
+whirlwind = "0.1.1"
 
 [dependencies.web-sys]
 version = "0.3"
@@ -33,4 +34,4 @@ features = [
 ]
 
 [workspace]
-members = ["src-tauri","crates/yal-core", "crates/lightsky-sys", "crates/lightsky", "crates/yal-theme", "crates/yal-watcher", "crates/yal-plugin" , "crates/yal-config" ]
+members = ["src-tauri","crates/yal-core", "crates/lightsky-sys", "crates/lightsky", "crates/yal-theme", "crates/yal-watcher", "crates/yal-plugin" , "crates/yal-config" , "crates/yal-plugin-protocol" ]

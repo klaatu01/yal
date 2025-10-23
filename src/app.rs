@@ -6,12 +6,16 @@ use leptos::{ev::KeyboardEvent, prelude::*};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::rc::Rc;
+use wasm_bindgen::closure::Closure;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 use yal_core::{
-    AppConfig, Command, CommandKind, Field, Form, Node, Popup, SelectField, Shortcut,
-    ShortcutCommand, SliderField, TextField, Theme,
+    AppConfig, Command, CommandKind, Field, Form, FrontendRequest, Node, Prompt, PromptRequest,
+    PromptResponse, SelectField, Shortcut, ShortcutCommand, SliderField, TextField, Theme,
 };
+
+use serde_json::json;
+use wasm_bindgen::JsValue;
 
 use leptos::prelude::AnyView; // type-erased view to unify match/if arms
 use leptos::prelude::CollectView;
@@ -90,27 +94,63 @@ fn init_cmd_list_listener(set_cmd_list: WriteSignal<Vec<Command>>, reset: impl F
     });
 }
 
-fn init_popup_listeners(set_popup: WriteSignal<Option<Popup>>) {
+fn api_respond(id: String, response: PromptResponse) {
     spawn_local(async move {
-        let on_show = Closure::<dyn FnMut(js_sys::Object)>::new({
-            move |evt_obj: js_sys::Object| {
-                if let Ok(payload) = js_sys::Reflect::get(&evt_obj, &JsValue::from_str("payload")) {
-                    if let Ok(popup) = serde_wasm_bindgen::from_value::<Popup>(payload) {
-                        set_popup.set(Some(popup));
-                    }
+        let resp_json: serde_json::Value = serde_json::to_value(response).unwrap();
+
+        let args = serde_wasm_bindgen::to_value(&json!({
+            "id": id,
+            "response": resp_json
+        }))
+        .unwrap();
+
+        let _ = invoke("api_response", args).await;
+    });
+}
+
+fn init_api_listener(
+    set_prompt: WriteSignal<Option<PromptRequest>>,
+    prompt: ReadSignal<Option<PromptRequest>>,
+) {
+    spawn_local(async move {
+        //
+        // api://prompt:show
+        //
+        let set_prompt_show = set_prompt; // WriteSignal is Copy
+        let cb_show = Closure::<dyn FnMut(js_sys::Object)>::new(move |evt_obj: js_sys::Object| {
+            if let Ok(payload) = js_sys::Reflect::get(&evt_obj, &JsValue::from_str("payload")) {
+                if let Ok(req) = serde_wasm_bindgen::from_value::<FrontendRequest<Prompt>>(payload)
+                {
+                    set_prompt_show.set(Some(PromptRequest {
+                        id: req.id,
+                        prompt: req.data,
+                    }));
                 }
             }
         });
-        let on_close = Closure::<dyn FnMut(js_sys::Object)>::new({
-            move |_evt_obj: js_sys::Object| {
-                set_popup.set(None);
-            }
-        });
+        let _u_show = tauri_listen("api://prompt:show", cb_show.as_ref().unchecked_ref()).await;
+        cb_show.forget();
 
-        let _u1 = tauri_listen("popup://show", on_show.as_ref().unchecked_ref()).await;
-        let _u2 = tauri_listen("popup://close", on_close.as_ref().unchecked_ref()).await;
-        on_show.forget();
-        on_close.forget();
+        let prompt_state = prompt;
+        let cb_state =
+            Closure::<dyn FnMut(js_sys::Object)>::new(move |_evt_obj: js_sys::Object| {
+                if let Some(p) = prompt_state.get() {
+                    let response = PromptResponse::State {
+                        values: serde_json::json!({}),
+                    };
+                    api_respond(p.id.clone(), response);
+                }
+            });
+        let _u_state = tauri_listen("api://prompt:state", cb_state.as_ref().unchecked_ref()).await;
+        cb_state.forget();
+
+        let set_prompt_close = set_prompt;
+        let cb_close =
+            Closure::<dyn FnMut(js_sys::Object)>::new(move |_evt_obj: js_sys::Object| {
+                set_prompt_close.set(None);
+            });
+        let _u_close = tauri_listen("api://prompt:close", cb_close.as_ref().unchecked_ref()).await;
+        cb_close.forget();
     });
 }
 
@@ -594,15 +634,12 @@ fn nudge_active_slider(delta: f64) {
 
 /* -------------------------------- Popup shell ------------------------------- */
 
-#[derive(Serialize, Deserialize)]
-pub struct PopupReponseArgs {
-    id: String,
-    value: serde_json::Value,
-}
-
 #[component]
-fn PopupView(popup: ReadSignal<Option<Popup>>, set_popup: WriteSignal<Option<Popup>>) -> AnyView {
-    let p = popup.get().unwrap();
+fn PromptView(
+    prompt: ReadSignal<Option<PromptRequest>>,
+    set_prompt: WriteSignal<Option<PromptRequest>>,
+) -> AnyView {
+    let p = prompt.get().unwrap();
     let (form_values, set_form_values) =
         signal(std::collections::HashMap::<String, serde_json::Value>::new());
 
@@ -612,22 +649,26 @@ fn PopupView(popup: ReadSignal<Option<Popup>>, set_popup: WriteSignal<Option<Pop
         match key.as_str() {
             "Escape" => {
                 e.prevent_default();
-                set_popup.set(None);
+
+                if let Some(p) = prompt.get() {
+                    spawn_local(async move {
+                        let response = PromptResponse::Cancel;
+                        api_respond(p.id.clone(), response);
+                        set_prompt.set(None);
+                    });
+                }
             }
             "Enter" => {
                 e.prevent_default();
 
-                // Prefer submitting the first <Form> (this path merges the current slider value via `submit_action`)
-                if let Some(p) = popup.get() {
+                if let Some(p) = prompt.get() {
                     spawn_local(async move {
                         let values = form_values.get();
-                        let args = serde_wasm_bindgen::to_value(&PopupReponseArgs {
-                            id: p.id.unwrap(),
-                            value: serde_json::Value::Object(values.into_iter().collect()),
-                        })
-                        .unwrap();
-                        let _ = invoke("plugin_api_response_handler", args).await;
-                        set_popup.set(None);
+                        let response = PromptResponse::Submit {
+                            values: serde_json::to_value(&values).unwrap(),
+                        };
+                        api_respond(p.id.clone(), response);
+                        set_prompt.set(None);
                     });
                 }
             }
@@ -662,7 +703,7 @@ fn PopupView(popup: ReadSignal<Option<Popup>>, set_popup: WriteSignal<Option<Pop
     });
 
     Effect::new(move |_| {
-        let _ = popup.get(); // track
+        let _ = prompt.get(); // track
         raf_focus_first_form_control();
     });
 
@@ -671,8 +712,8 @@ fn PopupView(popup: ReadSignal<Option<Popup>>, set_popup: WriteSignal<Option<Pop
           <div
             class="yal-popup"
             style=move || {
-              let w = p.width.unwrap_or(75.0);
-              let height_css = if let Some(h) = p.height {
+              let w = p.prompt.width.unwrap_or(75.0);
+              let height_css = if let Some(h) = p.prompt.height {
                   format!("height:{}%;", h)
               } else {
                   "height:auto;".to_string()
@@ -681,12 +722,12 @@ fn PopupView(popup: ReadSignal<Option<Popup>>, set_popup: WriteSignal<Option<Pop
             }
           >
           <div class="yal-popup-header">
-            { p.title.clone().unwrap_or_default() }
+            { p.prompt.title.clone().unwrap_or_default() }
           </div>
           <div class="yal-popup-body">
             {
-              p.content.iter().cloned()
-                .map(|n| view!{ <RenderNode node=n set_form_values=set_form_values.clone() /> })
+              p.prompt.content.iter().cloned()
+                .map(|n| view!{ <RenderNode node=n set_form_values=set_form_values /> })
                 .collect_view()
             }
           </div>
@@ -851,14 +892,14 @@ pub fn App() -> impl IntoView {
         set_query.set(String::new());
     };
 
-    let (popup, set_popup) = signal::<Option<Popup>>(None);
+    let (prompt, set_prompt) = signal::<Option<PromptRequest>>(None);
 
     load_config(set_shortcuts);
     load_theme();
     init_config_listener(set_shortcuts);
     init_theme_listener();
     init_cmd_list_listener(set_cmd_list, reset);
-    init_popup_listeners(set_popup);
+    init_api_listener(set_prompt, prompt);
 
     let filtered = Memo::new(move |_| {
         let q = query.get();
@@ -999,7 +1040,7 @@ pub fn App() -> impl IntoView {
 
     // Key navigation on the input
     let on_key = move |ev: KeyboardEvent| {
-        if popup.get().is_some() {
+        if prompt.get().is_some() {
             // When popup is open, keys are handled on the popup overlay.
             // Let them bubble; no action here.
         } else {
@@ -1010,7 +1051,7 @@ pub fn App() -> impl IntoView {
     let on_input = move |ev| set_query.set(event_target_value(&ev));
 
     Effect::new(move |_| {
-        if popup.get().is_none() {
+        if prompt.get().is_none() {
             raf_focus_search();
         }
     });
@@ -1051,8 +1092,8 @@ pub fn App() -> impl IntoView {
         }}
       </ul>
 
-      <Show when=move || popup.get().is_some()>
-        <PopupView popup=popup set_popup=set_popup />
+      <Show when=move || prompt.get().is_some()>
+        <PromptView prompt=prompt set_prompt=set_prompt />
       </Show>
     }
 }

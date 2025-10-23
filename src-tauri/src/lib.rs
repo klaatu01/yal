@@ -1,4 +1,5 @@
 use kameo::{actor::ActorRef, Actor};
+use std::sync::Arc;
 use tauri::{ActivationPolicy, Manager, WindowEvent};
 
 mod application_tree;
@@ -9,9 +10,10 @@ mod config;
 mod config_watcher;
 mod display;
 mod focus;
+mod frontend_middleware;
 mod ns_watcher;
 mod plugin;
-mod plugin_api;
+mod plugin_backend;
 mod router;
 mod window;
 
@@ -171,12 +173,14 @@ pub fn run() {
             window::apply_window_size(app.handle(), &cfg);
 
             tauri::async_runtime::block_on(async {
-                let (plugin_request_tx, plugin_api_responder) =
-                    plugin_api::PluginAPI::new(app.handle().clone()).spawn();
+                let frontend_middleware = Arc::new(frontend_middleware::FrontendMiddleware::new(
+                    app.handle().clone(),
+                ));
 
-                let plugin_manager_actor = plugin::PluginManagerActor::spawn(
-                    plugin::PluginManagerActor::new(plugin_request_tx),
-                );
+                let backend = plugin_backend::PluginBackend::new(frontend_middleware.clone());
+
+                let plugin_manager_actor =
+                    plugin::PluginManagerActor::spawn(plugin::PluginManagerActor::new(backend));
 
                 plugin_manager_actor
                     .ask(plugin::InstallPlugins)
@@ -238,7 +242,6 @@ pub fn run() {
                 );
                 ns_watcher::SystemWatcher::spawn(event_tx.clone());
 
-                app.manage(plugin_api_responder);
                 app.manage(plugin_manager_actor);
                 app.manage(cmd_actor);
                 app.manage(application_tree_actor);
@@ -247,6 +250,7 @@ pub fn run() {
                 app.manage(ax_actor);
                 app.manage(theme_manager_actor);
                 app.manage(config_actor);
+                app.manage(frontend_middleware);
 
                 event_tx.send(common::Events::RefreshTree).unwrap();
             });
@@ -259,7 +263,7 @@ pub fn run() {
             get_config,
             reload_config,
             get_theme,
-            plugin_api::plugin_api_response_handler,
+            frontend_middleware::api_response,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

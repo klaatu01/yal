@@ -113,7 +113,7 @@ impl CommandActor {
         }
         let plugin_ref = self
             .app_handle
-            .state::<ActorRef<crate::plugin::PluginManagerActor>>();
+            .state::<ActorRef<crate::plugin::PluginManagerActor<crate::plugin_backend::PluginBackend>>>();
 
         let response = plugin_ref
             .ask(crate::plugin::ExecutePluginCommand {
@@ -124,9 +124,7 @@ impl CommandActor {
             .await
             .map_err(|e| e.to_string())?;
 
-        if let Some(popup) = response.popup {
-            let _ = self.app_handle.emit("popup://show", popup);
-        } else if response.hide {
+        if response.hide {
             self.app_handle.hide().map_err(|e| e.to_string())?;
         }
 
@@ -195,7 +193,7 @@ impl CommandActor {
 
         let plugin_ref = self
             .app_handle
-            .state::<ActorRef<crate::plugin::PluginManagerActor>>();
+            .state::<ActorRef<crate::plugin::PluginManagerActor<crate::plugin_backend::PluginBackend>>>();
 
         let plugin_cmds = plugin_ref
             .ask(crate::plugin::LoadPlugins)

@@ -52,6 +52,8 @@ objc2-core-foundation = "0.3.2"
 yal-plugin = { path = "../crates/yal-plugin" }
 kanal = "0.1.1"
 yal-config = { path = "../crates/yal-config" }
+whirlwind = "0.1.1"
+nanoid = "0.4.0"
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-autostart = "2"

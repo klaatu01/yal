@@ -1,7 +1,9 @@
+use std::sync::Arc;
+
 use anyhow::Result;
 use mlua::Lua;
 
-use crate::protocol::PluginAPIRequest;
+use crate::{backend::Backend, protocol::PluginAPIRequest};
 
 pub mod base64;
 pub mod db;
@@ -15,10 +17,13 @@ pub mod vendor;
 pub struct InstallOptions<'a> {
     pub vendor_dir: Option<&'a std::path::Path>,
     pub http_limits: Option<http::HttpLimits>,
-    pub event_tx: kanal::Sender<PluginAPIRequest>,
 }
 
-pub fn install_all(lua: &Lua, opts: InstallOptions) -> Result<()> {
+pub fn install_all<B: Backend>(
+    lua: &Lua,
+    opts: InstallOptions,
+    plugin_backend: Arc<B>,
+) -> Result<()> {
     json::install_json_preload(lua)?;
 
     let limits = opts.http_limits.unwrap_or_default();
@@ -30,7 +35,7 @@ pub fn install_all(lua: &Lua, opts: InstallOptions) -> Result<()> {
 
     log::install_log_preload(lua)?;
 
-    ui::install_ui_preload(lua, opts.event_tx.clone())?;
+    ui::install_ui_preload(lua, plugin_backend.clone())?;
 
     db::install_db_preload(lua)?;
 
