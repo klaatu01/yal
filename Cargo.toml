@@ -33,4 +33,4 @@ features = [
 ]
 
 [workspace]
-members = ["src-tauri","crates/yal-core", "crates/lightsky-sys", "crates/lightsky", "crates/yal-theme", "crates/yal-watcher", "crates/yal-plugin", "crates/yal-config" ]
+members = ["yal-backend","crates/yal-core", "crates/lightsky-sys", "crates/lightsky", "crates/yal-theme", "crates/yal-watcher", "crates/yal-plugin", "crates/yal-config" ]

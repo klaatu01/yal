@@ -8,6 +8,7 @@ use crate::bridge::events::{
 };
 use crate::bridge::invoke::{hide_window, run_cmd};
 use crate::prompt::PromptView;
+use crate::utils::focus::raf_focus_search;
 use crate::utils::keys::normalize_combo_string;
 use leptos::ev::KeyboardEvent;
 use leptos::prelude::*;
@@ -175,6 +176,12 @@ pub fn App() -> impl IntoView {
     };
 
     let on_input = move |ev| set_query.set(event_target_value(&ev));
+
+    Effect::new(move |_| {
+        if prompt.get().is_none() {
+            raf_focus_search();
+        }
+    });
 
     view! {
       <div id="bar">

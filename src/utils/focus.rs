@@ -22,6 +22,24 @@ pub fn raf_focus_first_form_control() {
     }
 }
 
+fn focus_search_now() {
+    let Some(win) = web_sys::window() else { return };
+    let Some(doc) = win.document() else { return };
+    if let Some(el) = doc.get_element_by_id("search") {
+        if let Some(he) = el.dyn_ref::<web_sys::HtmlElement>() {
+            let _ = he.focus();
+        }
+    }
+}
+
+pub fn raf_focus_search() {
+    if let Some(win) = web_sys::window() {
+        let cb = Closure::<dyn FnMut()>::new(focus_search_now);
+        let _ = win.request_animation_frame(cb.as_ref().unchecked_ref());
+        cb.forget();
+    }
+}
+
 pub fn focus_move(delta: i32) {
     if let Some(doc) = web_sys::window().and_then(|w| w.document()) {
         if let Ok(list) = doc.query_selector_all(".yal-form-control") {
