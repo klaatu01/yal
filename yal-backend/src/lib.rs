@@ -1,4 +1,5 @@
 use kameo::{actor::ActorRef, Actor};
+use log::Log;
 use std::sync::Arc;
 use tauri::{ActivationPolicy, Manager, WindowEvent};
 
@@ -103,7 +104,12 @@ async fn current_cfg_or_default(app: &tauri::AppHandle) -> AppConfig {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_macos_permissions::init())
-        .plugin(tauri_plugin_log::Builder::new().build())
+        .plugin(
+            tauri_plugin_log::Builder::new()
+                .level(log::LevelFilter::Off)
+                .level_for("yal_lib", log::LevelFilter::Info)
+                .build(),
+        )
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             None,

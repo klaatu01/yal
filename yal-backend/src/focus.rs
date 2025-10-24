@@ -37,6 +37,7 @@ extern "C" {
     fn CFArrayGetCount(theArray: CFArrayRef) -> isize;
     fn CFArrayGetValueAtIndex(theArray: CFArrayRef, idx: isize) -> *const c_void;
     fn CFRelease(cf: CFTypeRef);
+    fn CFRetain(cf: CFTypeRef) -> CFTypeRef; // <-- add this
 }
 
 #[derive(Actor)]
@@ -48,6 +49,7 @@ pub struct FocusManagerActor {
 pub struct FocusWindow {
     pub pid: i32,
     pub window_id: Option<WindowId>,
+    pub title: Option<String>,
 }
 
 impl Message<FocusWindow> for FocusManagerActor {
@@ -59,7 +61,7 @@ impl Message<FocusWindow> for FocusManagerActor {
         _ctx: &mut kameo::prelude::Context<Self, Self::Reply>,
     ) -> Self::Reply {
         self.focus_window_id = msg.window_id;
-        self.focus(&self.app_handle, msg.pid, msg.window_id);
+        self.focus(msg.pid, msg.window_id, msg.title);
     }
 }
 
@@ -104,13 +106,15 @@ impl Message<InitFocus> for FocusManagerActor {
         _msg: InitFocus,
         _ctx: &mut kameo::prelude::Context<Self, Self::Reply>,
     ) -> Self::Reply {
-        if let Some(win) = self.focused_window_id() {
-            log::info!("Initial focused window: {:?}", win);
-            self.focus_window_id = Some(win);
-            Some(win)
-        } else {
-            log::info!("No focused window found");
-            None
+        unsafe {
+            if let Some(win) = self.focused_window_id() {
+                log::info!("Initial focused window: {:?}", win);
+                self.focus_window_id = Some(win);
+                Some(win)
+            } else {
+                log::info!("No focused window found");
+                None
+            }
         }
     }
 }
@@ -123,112 +127,186 @@ impl FocusManagerActor {
         }
     }
 
-    pub fn focused_window_id(&self) -> Option<WindowId> {
-        unsafe {
-            let info = CGWindowListCopyWindowInfo(kCGWindowListOptionOnScreenOnly, kCGNullWindowID);
-            if info.is_null() {
-                return None;
-            }
-
-            let count = CFArrayGetCount(info);
-            if count <= 0 {
-                return None;
-            }
-
-            let dict_ref = CFArrayGetValueAtIndex(info, 0) as CFDictionaryRef;
-
-            if dict_ref.is_null() {
-                return None;
-            }
-
-            let key = CFString::from_static_string("kCGWindowNumber");
-            let value: CFTypeRef =
-                *core_foundation::dictionary::CFDictionary::wrap_under_get_rule(dict_ref)
-                    .find(&key)?;
-
-            let num_ref: CFNumberRef = value as CFNumberRef;
-            let num = core_foundation::number::CFNumber::wrap_under_get_rule(num_ref);
-
-            num.to_i64().map(|n| WindowId(n as u32))
+    pub unsafe fn focused_window_id(&self) -> Option<WindowId> {
+        let info = CGWindowListCopyWindowInfo(kCGWindowListOptionOnScreenOnly, kCGNullWindowID);
+        if info.is_null() {
+            return None;
         }
+
+        let count = CFArrayGetCount(info);
+        if count <= 0 {
+            return None;
+        }
+
+        let dict_ref = CFArrayGetValueAtIndex(info, 0) as CFDictionaryRef;
+
+        if dict_ref.is_null() {
+            return None;
+        }
+
+        let key = CFString::from_static_string("kCGWindowNumber");
+        let value: CFTypeRef =
+            *core_foundation::dictionary::CFDictionary::wrap_under_get_rule(dict_ref).find(&key)?;
+
+        let num_ref: CFNumberRef = value as CFNumberRef;
+        let num = core_foundation::number::CFNumber::wrap_under_get_rule(num_ref);
+
+        num.to_i64().map(|n| WindowId(n as u32))
     }
 
-    pub fn focus(&self, app: &tauri::AppHandle, pid: i32, window_id: Option<WindowId>) {
-        let _ = app.run_on_main_thread(move || unsafe {
+    pub fn focus(&self, pid: i32, window_id: Option<WindowId>, title: Option<String>) {
+        let _ = self.app_handle.run_on_main_thread(move || unsafe {
             if let Some(app) = NSRunningApplication::runningApplicationWithProcessIdentifier(pid) {
                 let _ = app.activateWithOptions(NSApplicationActivationOptions::ActivateAllWindows);
             }
-        });
+            if window_id.is_none() && title.is_none() {
+                log::warn!("No window_id or title provided for focus()");
+                return;
+            }
 
-        if let Some(window_id) = window_id {
-            unsafe {
-                let app_ax: AXUIElementRef = AXUIElementCreateApplication(pid);
-                if app_ax.is_null() {
-                    return;
+            let app_ax = AXUIElementCreateApplication(pid);
+            if app_ax.is_null() {
+                return;
+            }
+
+            let ax_windows = CFString::from_static_string("AXWindows");
+            let ax_focused_window = CFString::from_static_string("AXFocusedWindow");
+            let ax_window_number = CFString::from_static_string("AXWindowNumber");
+            let ax_title = CFString::from_static_string("AXTitle");
+            let ax_raise = CFString::from_static_string("AXRaise");
+
+            let mut windows_val: CFTypeRef = ptr::null();
+            if AXUIElementCopyAttributeValue(
+                app_ax,
+                ax_windows.as_concrete_TypeRef(),
+                &mut windows_val,
+            ) != 0
+                || windows_val.is_null()
+            {
+                CFRelease(app_ax as CFTypeRef);
+                log::warn!("Failed to get AXWindows for pid {}", pid);
+                return;
+            }
+
+            let windows_array: CFArrayRef = windows_val as CFArrayRef;
+            let count = CFArrayGetCount(windows_array);
+            let target_num: Option<i64> = window_id.map(|w| w.0 as i64);
+            let target_title = title.as_ref().map(|s| s.as_str());
+
+            let mut matched_window: Option<AXUIElementRef> = None;
+
+            for i in 0..count {
+                let w_ref = CFArrayGetValueAtIndex(windows_array, i) as AXUIElementRef;
+                if w_ref.is_null() {
+                    continue;
                 }
 
-                let ax_windows = CFString::from_static_string("AXWindows");
-                let ax_focused_window = CFString::from_static_string("AXFocusedWindow");
-                let ax_window_number = CFString::from_static_string("AXWindowNumber");
-                let ax_raise = CFString::from_static_string("AXRaise");
+                let mut matched = false;
 
-                let mut windows_val: CFTypeRef = ptr::null();
-                if AXUIElementCopyAttributeValue(
-                    app_ax,
-                    ax_windows.as_concrete_TypeRef(),
-                    &mut windows_val,
-                ) != 0
-                    || windows_val.is_null()
-                {
-                    CFRelease(app_ax as CFTypeRef);
-                    return;
-                }
-
-                let windows_array: CFArrayRef = windows_val as CFArrayRef;
-                let count = CFArrayGetCount(windows_array);
-                let target_num: i64 = window_id.0 as i64;
-
-                let mut matched_window: Option<AXUIElementRef> = None;
-
-                for i in 0..count {
-                    let w_ref = CFArrayGetValueAtIndex(windows_array, i) as AXUIElementRef;
-                    if w_ref.is_null() {
-                        continue;
-                    }
-
+                // Try by AXWindowNumber
+                if let Some(n) = target_num {
                     let mut num_val: CFTypeRef = ptr::null();
-                    if AXUIElementCopyAttributeValue(
+                    let status = AXUIElementCopyAttributeValue(
                         w_ref,
                         ax_window_number.as_concrete_TypeRef(),
                         &mut num_val,
-                    ) != 0
-                        || num_val.is_null()
-                    {
-                        continue;
+                    );
+                    if status == 0 && !num_val.is_null() {
+                        let cfnum = CFNumber::wrap_under_create_rule(num_val as _);
+                        if let Some(win_n) = cfnum.to_i64() {
+                            if win_n == n {
+                                log::info!(
+                                    "Matched by AXWindowNumber: idx={} number={} target={}",
+                                    i,
+                                    win_n,
+                                    n
+                                );
+                                matched = true;
+                            }
+                        } else {
+                            log::info!("AXWindowNumber present but not convertible at idx={}", i);
+                        }
+                    } else {
+                        log::warn!("Failed to read AXWindowNumber at idx={}", i);
                     }
+                }
 
-                    let cfnum = CFNumber::wrap_under_create_rule(num_val as _);
-                    if let Some(n) = cfnum.to_i64() {
-                        if n == target_num {
-                            matched_window = Some(w_ref);
-                            break;
+                // Fallback: AXTitle
+                if !matched {
+                    if let Some(t) = target_title {
+                        let mut title_val: CFTypeRef = ptr::null();
+                        let status = AXUIElementCopyAttributeValue(
+                            w_ref,
+                            ax_title.as_concrete_TypeRef(),
+                            &mut title_val,
+                        );
+                        if status == 0 && !title_val.is_null() {
+                            let cfstr = CFString::wrap_under_create_rule(title_val as _);
+                            let current = cfstr.to_string();
+                            if current == t {
+                                log::info!("Matched by AXTitle: idx={} title='{}'", i, current);
+                                matched = true;
+                            } else {
+                                log::info!(
+                                    "AXTitle mismatch: idx={} title='{}' target='{}'",
+                                    i,
+                                    current,
+                                    t
+                                );
+                            }
+                        } else {
+                            log::info!("No AXTitle for window at idx={}", i);
                         }
                     }
                 }
 
-                CFRelease(windows_val);
+                if matched {
+                    // RETAIN before breaking; the array will be released soon.
+                    let retained = CFRetain(w_ref as CFTypeRef) as AXUIElementRef;
+                    matched_window = Some(retained);
+                    log::info!("Found matching window at index {}", i);
+                    break;
+                }
+            }
 
-                if let Some(w_ref) = matched_window {
-                    let _ = AXUIElementSetAttributeValue(
-                        app_ax,
-                        ax_focused_window.as_concrete_TypeRef(),
-                        w_ref as CFTypeRef,
+            // Now it's safe to release the array of windows.
+            CFRelease(windows_val);
+
+            if let Some(w_ref) = matched_window {
+                let set_status = AXUIElementSetAttributeValue(
+                    app_ax,
+                    ax_focused_window.as_concrete_TypeRef(),
+                    w_ref as CFTypeRef,
+                );
+                if set_status != 0 {
+                    log::warn!(
+                        "AXUIElementSetAttributeValue(AXFocusedWindow) failed with {}",
+                        set_status
                     );
-                    let _ = AXUIElementPerformAction(w_ref, ax_raise.as_concrete_TypeRef());
                 }
 
-                CFRelease(app_ax as CFTypeRef);
+                let raise_status = AXUIElementPerformAction(w_ref, ax_raise.as_concrete_TypeRef());
+                if raise_status != 0 {
+                    log::warn!(
+                        "AXUIElementPerformAction(AXRaise) failed with {}",
+                        raise_status
+                    );
+                } else {
+                    log::info!("Focused window performed AXRaise");
+                }
+
+                // Release our retain
+                CFRelease(w_ref as CFTypeRef);
+            } else {
+                log::warn!(
+                    "No matching window found for pid {} (id={:?}, title={:?})",
+                    pid,
+                    window_id,
+                    title
+                );
             }
-        }
+
+            CFRelease(app_ax as CFTypeRef);
+        });
     }
 }

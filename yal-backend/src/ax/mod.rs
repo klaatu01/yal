@@ -182,6 +182,7 @@ impl AX {
                 pid,
                 window_id,
                 space_id,
+                title,
                 ..
             } = res;
             let _ = self.focus_space(*space_id).await;
@@ -190,6 +191,7 @@ impl AX {
                 .ask(crate::focus::FocusWindow {
                     pid: *pid,
                     window_id: Some(*window_id),
+                    title: title.clone(),
                 })
                 .await;
         }
@@ -228,6 +230,7 @@ impl AX {
                 .ask(crate::focus::FocusWindow {
                     pid,
                     window_id: Some(window_id),
+                    title: title.clone(),
                 })
                 .await;
         }

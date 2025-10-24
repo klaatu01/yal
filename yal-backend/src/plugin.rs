@@ -46,11 +46,11 @@ impl<T: Backend> Message<LoadPlugins> for PluginManagerActor<T> {
         _msg: LoadPlugins,
         _ctx: &mut kameo::prelude::Context<Self, Self::Reply>,
     ) -> Self::Reply {
-        log::info!("Loading plugins...");
+        log::debug!("Loading plugins...");
         self.manager.load_config().await.unwrap();
-        log::info!("Plugin config loaded: {:#?}", self.manager.config);
+        log::debug!("Plugin config loaded: {:#?}", self.manager.config);
         self.manager.load_plugins().await.unwrap();
-        log::info!("Plugins loaded: {}", self.manager.plugins.len());
+        log::debug!("Plugins loaded: {}", self.manager.plugins.len());
         self.manager.commands().await
     }
 }
