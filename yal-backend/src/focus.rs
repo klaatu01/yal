@@ -37,7 +37,7 @@ extern "C" {
     fn CFArrayGetCount(theArray: CFArrayRef) -> isize;
     fn CFArrayGetValueAtIndex(theArray: CFArrayRef, idx: isize) -> *const c_void;
     fn CFRelease(cf: CFTypeRef);
-    fn CFRetain(cf: CFTypeRef) -> CFTypeRef; // <-- add this
+    fn CFRetain(cf: CFTypeRef) -> CFTypeRef;
 }
 
 #[derive(Actor)]
@@ -191,7 +191,7 @@ impl FocusManagerActor {
             let windows_array: CFArrayRef = windows_val as CFArrayRef;
             let count = CFArrayGetCount(windows_array);
             let target_num: Option<i64> = window_id.map(|w| w.0 as i64);
-            let target_title = title.as_ref().map(|s| s.as_str());
+            let target_title = title.as_deref();
 
             let mut matched_window: Option<AXUIElementRef> = None;
 
@@ -261,7 +261,6 @@ impl FocusManagerActor {
                 }
 
                 if matched {
-                    // RETAIN before breaking; the array will be released soon.
                     let retained = CFRetain(w_ref as CFTypeRef) as AXUIElementRef;
                     matched_window = Some(retained);
                     log::info!("Found matching window at index {}", i);
@@ -269,7 +268,6 @@ impl FocusManagerActor {
                 }
             }
 
-            // Now it's safe to release the array of windows.
             CFRelease(windows_val);
 
             if let Some(w_ref) = matched_window {
