@@ -1,5 +1,4 @@
 use kameo::{actor::ActorRef, Actor};
-use log::Log;
 use std::sync::Arc;
 use tauri::{ActivationPolicy, Manager, WindowEvent};
 
