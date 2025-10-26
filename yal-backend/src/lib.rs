@@ -129,6 +129,15 @@ pub fn run() {
                         if let Some(win) = app.get_webview_window("main") {
                             if win.is_visible().unwrap_or(false) {
                                 hide_palette_window(app);
+                                let frontend_middleware =
+                                    app.state::<frontend_middleware::FrontendMiddleware>();
+                                tauri::async_runtime::block_on(async {
+                                    let _ = frontend_middleware
+                                        .respond_all(anyhow::Result::Err(anyhow::anyhow!(
+                                            "Palette hidden"
+                                        )))
+                                        .await;
+                                });
                             } else {
                                 tauri::async_runtime::block_on(async {
                                     let _ = focus_manager.ask(focus::InitFocus).await;
@@ -269,6 +278,7 @@ pub fn run() {
             reload_config,
             get_theme,
             frontend_middleware::api_response,
+            frontend_middleware::api_error
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
