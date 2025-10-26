@@ -26,24 +26,20 @@ impl Backend for PluginBackend {
         Ok(request_id)
     }
     async fn prompt_state(&self, id: RequestId) -> Result<yal_core::PromptResponse> {
-        let response = self
-            .middleware
+        self.middleware
             .ask("prompt:state", id.clone(), serde_json::json!({}))
             .await
             .recv()
             .await
-            .map_err(|e| anyhow::anyhow!(e.to_string()))?;
-        Ok(response)
+            .map_err(|e| anyhow::anyhow!(e.to_string()))
     }
     async fn prompt_submission(&self, id: RequestId) -> Result<yal_core::PromptResponse> {
-        let response = self
-            .middleware
+        self.middleware
             .ask("prompt:submit", id.clone(), serde_json::json!({}))
             .await
             .recv()
             .await
-            .map_err(|e| anyhow::anyhow!(e.to_string()))?;
-        Ok(response)
+            .map_err(|e| anyhow::anyhow!(e.to_string()))
     }
     async fn prompt_cancel(&self, _id: RequestId) -> Result<()> {
         self.middleware

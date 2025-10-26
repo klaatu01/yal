@@ -130,7 +130,7 @@ pub fn run() {
                             if win.is_visible().unwrap_or(false) {
                                 hide_palette_window(app);
                                 let frontend_middleware =
-                                    app.state::<frontend_middleware::FrontendMiddleware>();
+                                    app.state::<Arc<frontend_middleware::FrontendMiddleware>>();
                                 tauri::async_runtime::block_on(async {
                                     let _ = frontend_middleware
                                         .respond_all(anyhow::Result::Err(anyhow::anyhow!(

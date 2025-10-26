@@ -139,7 +139,7 @@ pub fn init_api_listener(
             Closure::<dyn FnMut(js_sys::Object)>::new(move |_evt_obj: js_sys::Object| {
                 set_prompt_close.set(None);
             });
-        let _u_close = tauri_listen("api://prompt:close", cb_close.as_ref().unchecked_ref()).await;
+        let _u_close = tauri_listen("api://prompt:cancel", cb_close.as_ref().unchecked_ref()).await;
         cb_close.forget();
     });
 }
