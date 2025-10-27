@@ -16,4 +16,5 @@ pub trait Backend: Send + Sync + Clone + 'static {
         id: RequestId,
     ) -> impl Future<Output = anyhow::Result<PromptResponse>> + Send;
     fn prompt_cancel(&self, id: RequestId) -> impl Future<Output = anyhow::Result<()>> + Send;
+    fn set_visibility(&self, visible: bool) -> impl Future<Output = anyhow::Result<()>> + Send;
 }

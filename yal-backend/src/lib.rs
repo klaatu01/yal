@@ -107,6 +107,7 @@ pub fn run() {
             tauri_plugin_log::Builder::new()
                 .level(log::LevelFilter::Off)
                 .level_for("yal_lib", log::LevelFilter::Info)
+                .level_for("yal_plugin", log::LevelFilter::Info)
                 .build(),
         )
         .plugin(tauri_plugin_autostart::init(
@@ -129,6 +130,15 @@ pub fn run() {
                         if let Some(win) = app.get_webview_window("main") {
                             if win.is_visible().unwrap_or(false) {
                                 hide_palette_window(app);
+                                let frontend_middleware =
+                                    app.state::<Arc<frontend_middleware::FrontendMiddleware>>();
+                                tauri::async_runtime::block_on(async {
+                                    let _ = frontend_middleware
+                                        .respond_all(anyhow::Result::Err(anyhow::anyhow!(
+                                            "Palette hidden"
+                                        )))
+                                        .await;
+                                });
                             } else {
                                 tauri::async_runtime::block_on(async {
                                     let _ = focus_manager.ask(focus::InitFocus).await;
@@ -182,7 +192,10 @@ pub fn run() {
                     app.handle().clone(),
                 ));
 
-                let backend = plugin_backend::PluginBackend::new(frontend_middleware.clone());
+                let backend = plugin_backend::PluginBackend::new(
+                    app.handle().clone(),
+                    frontend_middleware.clone(),
+                );
 
                 let plugin_manager_actor =
                     plugin::PluginManagerActor::spawn(plugin::PluginManagerActor::new(backend));
@@ -269,6 +282,7 @@ pub fn run() {
             reload_config,
             get_theme,
             frontend_middleware::api_response,
+            frontend_middleware::api_error
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

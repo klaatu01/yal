@@ -114,6 +114,9 @@ body {
 }
 
 /* --- Popup overlay & container ------------------------------------------- */
+.yal-popup-body>*+* {
+  margin-top: calc(var(--pad) * 1);
+}
 
 .yal-popup-overlay {
   position: fixed;

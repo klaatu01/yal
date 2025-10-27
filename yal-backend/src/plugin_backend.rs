@@ -1,15 +1,20 @@
 use anyhow::Result;
 use std::sync::Arc;
+use tauri::AppHandle;
 use yal_plugin::backend::{Backend, RequestId};
 
 #[derive(Clone)]
 pub struct PluginBackend {
+    app: AppHandle,
     middleware: Arc<crate::frontend_middleware::FrontendMiddleware>,
 }
 
 impl PluginBackend {
-    pub fn new(middleware: Arc<crate::frontend_middleware::FrontendMiddleware>) -> Self {
-        Self { middleware }
+    pub fn new(
+        app: AppHandle,
+        middleware: Arc<crate::frontend_middleware::FrontendMiddleware>,
+    ) -> Self {
+        Self { middleware, app }
     }
 
     pub fn generate_request_id(&self) -> RequestId {
@@ -26,29 +31,33 @@ impl Backend for PluginBackend {
         Ok(request_id)
     }
     async fn prompt_state(&self, id: RequestId) -> Result<yal_core::PromptResponse> {
-        let response = self
-            .middleware
+        self.middleware
             .ask("prompt:state", id.clone(), serde_json::json!({}))
             .await
             .recv()
             .await
-            .map_err(|e| anyhow::anyhow!(e.to_string()))?;
-        Ok(response)
+            .map_err(|e| anyhow::anyhow!(e.to_string()))
     }
     async fn prompt_submission(&self, id: RequestId) -> Result<yal_core::PromptResponse> {
-        let response = self
-            .middleware
+        self.middleware
             .ask("prompt:submit", id.clone(), serde_json::json!({}))
             .await
             .recv()
             .await
-            .map_err(|e| anyhow::anyhow!(e.to_string()))?;
-        Ok(response)
+            .map_err(|e| anyhow::anyhow!(e.to_string()))
     }
     async fn prompt_cancel(&self, _id: RequestId) -> Result<()> {
         self.middleware
             .tell("prompt:cancel", _id.clone(), serde_json::json!({}))
             .await;
+        Ok(())
+    }
+    async fn set_visibility(&self, visible: bool) -> Result<()> {
+        if visible {
+            self.app.show().unwrap();
+        } else {
+            self.app.hide().unwrap();
+        }
         Ok(())
     }
 }

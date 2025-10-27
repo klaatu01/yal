@@ -1,18 +1,19 @@
-use serde::{de::DeserializeOwned, Serialize};
-use std::sync::Arc;
+use anyhow::Result;
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use std::{collections::HashMap, sync::Arc};
 use tauri::Emitter;
 use yal_core::FrontendRequest;
 
 pub struct FrontendMiddleware {
     app: tauri::AppHandle,
-    responders: whirlwind::ShardMap<String, kanal::Sender<serde_json::Value>>,
+    responders: tokio::sync::RwLock<HashMap<String, kanal::Sender<FrontendPromise>>>,
 }
 
 impl FrontendMiddleware {
     pub fn new(app: tauri::AppHandle) -> Self {
         Self {
             app,
-            responders: whirlwind::ShardMap::new(),
+            responders: tokio::sync::RwLock::new(HashMap::new()),
         }
     }
 
@@ -26,8 +27,8 @@ impl FrontendMiddleware {
         data: T,
     ) -> FrontendResponse<R> {
         let topic = topic.into();
-        let (tx, rx) = kanal::unbounded::<serde_json::Value>();
-        let _ = self.responders.insert(id.clone(), tx).await;
+        let (tx, rx) = kanal::unbounded();
+        let _ = self.responders.write().await.insert(id.clone(), tx);
         log::info!("asking frontend {}", &topic);
         let data = FrontendRequest { id, data };
         self.send(topic, data).await;
@@ -50,16 +51,30 @@ impl FrontendMiddleware {
     pub async fn respond(
         &self,
         id: impl Into<String>,
-        response: serde_json::Value,
+        response: FrontendPromise,
     ) -> anyhow::Result<()> {
         let id = id.into();
-        if let Some(tx) = self.responders.remove(&id).await {
+        if let Some(tx) = self.responders.write().await.remove(&id) {
             tx.send(response)
                 .map_err(|e| anyhow::anyhow!(e.to_string()))?;
             Ok(())
         } else {
             Err(anyhow::anyhow!("No responder found for id {}", id))
         }
+    }
+
+    pub async fn respond_all(&self, response: Result<serde_json::Value>) -> anyhow::Result<()> {
+        let response: FrontendPromise = response.into();
+        let mut responders_guard = self.responders.write().await;
+
+        let responders = responders_guard.values();
+
+        for responder in responders {
+            let _ = responder.as_async().send(response.clone()).await;
+        }
+
+        responders_guard.clear();
+        Ok(())
     }
 
     async fn send<T: Send + Serialize + Clone + 'static>(
@@ -71,13 +86,28 @@ impl FrontendMiddleware {
     }
 }
 
+#[derive(Serialize, Deserialize, Clone)]
+pub enum FrontendPromise {
+    Fulfilled(serde_json::Value),
+    Rejected(String),
+}
+
+impl From<anyhow::Result<serde_json::Value>> for FrontendPromise {
+    fn from(result: anyhow::Result<serde_json::Value>) -> Self {
+        match result {
+            Ok(value) => FrontendPromise::Fulfilled(value),
+            Err(e) => FrontendPromise::Rejected(e.to_string()),
+        }
+    }
+}
+
 pub struct FrontendResponse<T: Send + DeserializeOwned + 'static> {
-    receiver: kanal::Receiver<serde_json::Value>,
+    receiver: kanal::Receiver<FrontendPromise>,
     _marker: std::marker::PhantomData<T>,
 }
 
 impl<T: Send + DeserializeOwned + 'static> FrontendResponse<T> {
-    pub fn new(receiver: kanal::Receiver<serde_json::Value>) -> Self {
+    pub fn new(receiver: kanal::Receiver<FrontendPromise>) -> Self {
         Self {
             receiver,
             _marker: std::marker::PhantomData,
@@ -86,8 +116,14 @@ impl<T: Send + DeserializeOwned + 'static> FrontendResponse<T> {
 
     pub async fn recv(self) -> anyhow::Result<T> {
         let value = self.receiver.as_async().recv().await?;
-        let result: T = serde_json::from_value(value)?;
-        Ok(result)
+        match value {
+            FrontendPromise::Rejected(e) => Err(anyhow::anyhow!(e)),
+            FrontendPromise::Fulfilled(v) => {
+                let result =
+                    serde_json::from_value::<T>(v).map_err(|e| anyhow::anyhow!(e.to_string()))?;
+                Ok(result)
+            }
+        }
     }
 }
 
@@ -98,7 +134,19 @@ pub async fn api_response(
     response: serde_json::Value,
 ) -> Result<(), String> {
     middleware
-        .respond(id, response)
+        .respond(id, Ok(response).into())
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn api_error(
+    middleware: tauri::State<'_, Arc<FrontendMiddleware>>,
+    id: String,
+    error: String,
+) -> Result<(), String> {
+    middleware
+        .respond(id, Err(anyhow::anyhow!(error)).into())
         .await
         .map_err(|e| e.to_string())
 }

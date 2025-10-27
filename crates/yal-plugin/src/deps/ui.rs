@@ -5,6 +5,7 @@ use mlua::{Lua, Result as LuaResult, Table};
 use crate::backend::Backend;
 
 pub mod prompt;
+pub mod visibility;
 
 pub fn install_ui_preload<B: Backend>(lua: &Lua, plugin_backend: Arc<B>) -> LuaResult<()> {
     let pkg: Table = lua.globals().get("package")?;
@@ -15,6 +16,9 @@ pub fn install_ui_preload<B: Backend>(lua: &Lua, plugin_backend: Arc<B>) -> LuaR
 
         let prompt_module = prompt::create_prompt_module(lua, plugin_backend.clone())?;
         m.set("prompt", prompt_module)?;
+
+        let visibility_module = visibility::create_visibility_module(lua, plugin_backend.clone())?;
+        m.set("visibility", visibility_module)?;
 
         Ok(m)
     })?;

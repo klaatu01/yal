@@ -151,6 +151,34 @@ pub struct Prompt {
     pub ui_schema_version: Option<u32>, // default 1
 }
 
+impl Prompt {
+    pub fn contains_input_fields(&self) -> bool {
+        fn node_contains_input_fields(node: &Node) -> bool {
+            match node {
+                Node::Form(form) => !form.fields.is_empty(),
+                Node::VStack { children, .. }
+                | Node::HStack { children, .. }
+                | Node::Grid { children, .. } => {
+                    for child in children {
+                        if node_contains_input_fields(child) {
+                            return true;
+                        }
+                    }
+                    false
+                }
+                _ => false,
+            }
+        }
+
+        for node in &self.content {
+            if node_contains_input_fields(node) {
+                return true;
+            }
+        }
+        false
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct PromptRequest {
     pub id: String,

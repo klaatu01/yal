@@ -99,6 +99,8 @@ pub fn init_cmd_list_listener(
 pub fn init_api_listener(
     set_prompt: WriteSignal<Option<PromptRequest>>,
     prompt: ReadSignal<Option<PromptRequest>>,
+    form_values: ReadSignal<std::collections::HashMap<String, serde_json::Value>>,
+    set_form_values: WriteSignal<std::collections::HashMap<String, serde_json::Value>>,
 ) {
     leptos::task::spawn_local(async move {
         // prompt:show
@@ -122,8 +124,9 @@ pub fn init_api_listener(
         let cb_state =
             Closure::<dyn FnMut(js_sys::Object)>::new(move |_evt_obj: js_sys::Object| {
                 if let Some(p) = prompt_state.get() {
+                    let form_vals = form_values.get();
                     let response = PromptResponse::State {
-                        values: serde_json::json!({}),
+                        values: serde_json::to_value(&form_vals).unwrap(),
                     };
                     leptos::task::spawn_local(async move {
                         api_respond(p.id.clone(), response).await;
@@ -139,7 +142,7 @@ pub fn init_api_listener(
             Closure::<dyn FnMut(js_sys::Object)>::new(move |_evt_obj: js_sys::Object| {
                 set_prompt_close.set(None);
             });
-        let _u_close = tauri_listen("api://prompt:close", cb_close.as_ref().unchecked_ref()).await;
+        let _u_close = tauri_listen("api://prompt:cancel", cb_close.as_ref().unchecked_ref()).await;
         cb_close.forget();
     });
 }

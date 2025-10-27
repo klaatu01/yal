@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{sync::Arc, time::Instant};
 
 use crate::backend::{Backend, RequestId};
 use mlua::{Function, Lua, LuaSerdeExt, Result as LuaResult, UserData, Value};
@@ -7,6 +7,7 @@ pub struct Prompt<T: Backend> {
     backend: Arc<T>,
     pub prompt_id: RequestId,
     result: Option<yal_core::PromptResponse>,
+    last_state_timestamp: Option<Instant>,
 }
 
 impl<T: Backend> Prompt<T> {
@@ -15,6 +16,7 @@ impl<T: Backend> Prompt<T> {
             backend,
             prompt_id,
             result: None,
+            last_state_timestamp: None,
         }
     }
 
@@ -23,32 +25,44 @@ impl<T: Backend> Prompt<T> {
             return Ok(values.clone());
         }
         let resp = self.backend.prompt_submission(self.prompt_id.clone()).await;
-        loop {
+        let resp = loop {
             match resp {
                 Ok(ref response) => match response {
                     yal_core::PromptResponse::Submit { values } => {
-                        return Ok(values.clone());
+                        break Ok(values.clone());
                     }
                     yal_core::PromptResponse::Cancel => {
-                        return Err(anyhow::anyhow!("Prompt was cancelled by user"));
+                        break Err(anyhow::anyhow!("Prompt was cancelled by user"));
                     }
                     _ => {
                         continue;
                     }
                 },
                 Err(e) => {
-                    return Err(anyhow::anyhow!(
+                    break Err(anyhow::anyhow!(
                         "Failed to receive prompt submission: {}",
                         e
                     ));
                 }
             };
+        };
+        if resp.is_err() {
+            self.cancel().await?;
         }
+        resp
     }
 
     pub async fn state(&mut self) -> anyhow::Result<Option<serde_json::Value>> {
+        if self
+            .last_state_timestamp
+            .map(|ts| ts.elapsed().as_millis() < 100)
+            .unwrap_or(false)
+        {
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        }
+
         let resp = self.backend.prompt_state(self.prompt_id.clone()).await;
-        match resp {
+        let resp = match resp {
             Ok(response) => match response {
                 yal_core::PromptResponse::State { values } => Ok(Some(values)),
                 yal_core::PromptResponse::Submit { .. } => {
@@ -60,7 +74,12 @@ impl<T: Backend> Prompt<T> {
                 }
             },
             Err(e) => Err(anyhow::anyhow!("Failed to receive prompt state: {}", e)),
+        };
+        if resp.is_err() {
+            self.cancel().await?;
         }
+        self.last_state_timestamp = Some(Instant::now());
+        resp
     }
 
     pub async fn cancel(&mut self) -> anyhow::Result<()> {
