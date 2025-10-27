@@ -107,6 +107,7 @@ pub fn run() {
             tauri_plugin_log::Builder::new()
                 .level(log::LevelFilter::Off)
                 .level_for("yal_lib", log::LevelFilter::Info)
+                .level_for("yal_plugin", log::LevelFilter::Info)
                 .build(),
         )
         .plugin(tauri_plugin_autostart::init(
@@ -191,7 +192,10 @@ pub fn run() {
                     app.handle().clone(),
                 ));
 
-                let backend = plugin_backend::PluginBackend::new(frontend_middleware.clone());
+                let backend = plugin_backend::PluginBackend::new(
+                    app.handle().clone(),
+                    frontend_middleware.clone(),
+                );
 
                 let plugin_manager_actor =
                     plugin::PluginManagerActor::spawn(plugin::PluginManagerActor::new(backend));

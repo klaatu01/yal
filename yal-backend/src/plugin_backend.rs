@@ -1,15 +1,20 @@
 use anyhow::Result;
 use std::sync::Arc;
+use tauri::AppHandle;
 use yal_plugin::backend::{Backend, RequestId};
 
 #[derive(Clone)]
 pub struct PluginBackend {
+    app: AppHandle,
     middleware: Arc<crate::frontend_middleware::FrontendMiddleware>,
 }
 
 impl PluginBackend {
-    pub fn new(middleware: Arc<crate::frontend_middleware::FrontendMiddleware>) -> Self {
-        Self { middleware }
+    pub fn new(
+        app: AppHandle,
+        middleware: Arc<crate::frontend_middleware::FrontendMiddleware>,
+    ) -> Self {
+        Self { middleware, app }
     }
 
     pub fn generate_request_id(&self) -> RequestId {
@@ -45,6 +50,14 @@ impl Backend for PluginBackend {
         self.middleware
             .tell("prompt:cancel", _id.clone(), serde_json::json!({}))
             .await;
+        Ok(())
+    }
+    async fn set_visibility(&self, visible: bool) -> Result<()> {
+        if visible {
+            self.app.show().unwrap();
+        } else {
+            self.app.hide().unwrap();
+        }
         Ok(())
     }
 }

@@ -22,6 +22,8 @@ pub fn App() -> impl IntoView {
     let (selected, set_selected) = signal(0usize);
     let (filter, set_filter) = signal(Option::<CommandKind>::None);
     let (shortcuts, set_shortcuts) = signal(Vec::<Shortcut>::new());
+    let (form_values, set_form_values) =
+        signal(std::collections::HashMap::<String, serde_json::Value>::new());
 
     let reset = move || {
         set_selected.set(0);
@@ -38,7 +40,7 @@ pub fn App() -> impl IntoView {
     init_config_listener(set_shortcuts);
     init_theme_listener();
     init_cmd_list_listener(set_cmd_list, reset);
-    init_api_listener(set_prompt, prompt);
+    init_api_listener(set_prompt, prompt, form_values, set_form_values);
 
     let filtered = Memo::new(move |_| {
         let q = query.get();
@@ -204,7 +206,7 @@ pub fn App() -> impl IntoView {
       <list::ResultsList selected=selected filtered=filtered filter=filter />
 
       <Show when=move || prompt.get().is_some()>
-        <PromptView prompt=prompt set_prompt=set_prompt />
+        <PromptView prompt=prompt set_prompt=set_prompt form_values=form_values set_form_values=set_form_values />
       </Show>
     }
 }

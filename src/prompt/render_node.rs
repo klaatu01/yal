@@ -38,7 +38,8 @@ pub fn RenderNode(
             </div>
         }.into_any(),
 
-        Node::Markdown { md } => view! { <div class="yal-md">{ md }</div> }.into_any(),
+        Node::Markdown { md } => view! { <super::RenderMarkdown md=md /> }.into_any(),
+
         Node::Text { text, .. } => view! { <div class="yal-text">{ text }</div> }.into_any(),
 
         Node::Form(form) => view! { <super::RenderForm form=form set_form_values=set_form_values /> }.into_any(),

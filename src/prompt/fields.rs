@@ -156,6 +156,17 @@ pub fn RenderSlider(
         }
     });
 
+    Effect::new({
+        let name = name.clone();
+        move |_| {
+            set_form_values.update(|m| {
+                m.entry(name.clone()).or_insert(serde_json::Value::Number(
+                    serde_json::Number::from_f64(initial).unwrap(),
+                ));
+            });
+        }
+    });
+
     view! {
         <input
           type="range"
@@ -170,5 +181,33 @@ pub fn RenderSlider(
             on_input(name.clone(), v);
           }
         />
+    }
+}
+
+#[component]
+pub fn RenderButton(
+    label: String,
+    set_form_values: WriteSignal<std::collections::HashMap<String, serde_json::Value>>,
+) -> impl IntoView {
+    let button_label = label.clone();
+    let on_click = Rc::new(move || {
+        set_form_values.update(|m| {
+            m.insert(
+                "button".to_string(),
+                serde_json::Value::String(button_label.clone()),
+            );
+        });
+    });
+
+    view! {
+      <button
+        type="button"
+        class="yal-btn yal-form-control"
+        on:click=move |_| {
+          on_click();
+        }
+      >
+        { label }
+      </button>
     }
 }

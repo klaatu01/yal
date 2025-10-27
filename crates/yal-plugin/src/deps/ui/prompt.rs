@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{sync::Arc, time::Instant};
 
 use crate::backend::{Backend, RequestId};
 use mlua::{Function, Lua, LuaSerdeExt, Result as LuaResult, UserData, Value};
@@ -7,6 +7,7 @@ pub struct Prompt<T: Backend> {
     backend: Arc<T>,
     pub prompt_id: RequestId,
     result: Option<yal_core::PromptResponse>,
+    last_state_timestamp: Option<Instant>,
 }
 
 impl<T: Backend> Prompt<T> {
@@ -15,6 +16,7 @@ impl<T: Backend> Prompt<T> {
             backend,
             prompt_id,
             result: None,
+            last_state_timestamp: None,
         }
     }
 
@@ -51,6 +53,14 @@ impl<T: Backend> Prompt<T> {
     }
 
     pub async fn state(&mut self) -> anyhow::Result<Option<serde_json::Value>> {
+        if self
+            .last_state_timestamp
+            .map(|ts| ts.elapsed().as_millis() < 100)
+            .unwrap_or(false)
+        {
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        }
+
         let resp = self.backend.prompt_state(self.prompt_id.clone()).await;
         let resp = match resp {
             Ok(response) => match response {
@@ -68,6 +78,7 @@ impl<T: Backend> Prompt<T> {
         if resp.is_err() {
             self.cancel().await?;
         }
+        self.last_state_timestamp = Some(Instant::now());
         resp
     }
 
