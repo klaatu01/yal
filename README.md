@@ -357,3 +357,9 @@ If you would like to help with development, please see the [roadmap](./ROADMAP.m
 MIT. Use it, fork it, rebind it, ship it.
 
 [Tauri]: https://tauri.app/
+
+## Disclaimer
+
+Not affiliated in any way with https://github.com/srsholmes/yal.
+
+Turns out it just a great name.
