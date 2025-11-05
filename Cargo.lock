@@ -7463,6 +7463,7 @@ dependencies = [
  "serde_json",
  "tokio",
  "yal-ipc",
+ "yal-plugin",
 ]
 
 [[package]]
