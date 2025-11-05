@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(serde::Serialize, serde::Deserialize, Clone, Debug, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct WindowTarget {
     pub app_name: String,
     pub title: Option<String>,
