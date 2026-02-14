@@ -5,7 +5,9 @@ pub struct PluginConfigEntry {
     /// Human/plugin key (the key under [plugins] if present), or fallback
     pub name: String,
     /// Full git URL (e.g. https://github.com/owner/repo.git) or shorthand "owner/repo"
-    pub git: String,
+    pub git: Option<String>,
+    /// Local filesystem path to the plugin directory
+    pub path: Option<String>,
     /// Free-form plugin config handed to the plugin
     pub config: Option<serde_json::Value>,
 }

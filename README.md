@@ -224,74 +224,257 @@ Each **theme** is a `[name]` table with these keys:
 
 ## Plugins
 
-YAL supports lightweight **Lua** plugins. Plugins can add commands (e.g. Spotify controls, window actions, notes/Shortcuts automations via `osascript`) that appear in YAL’s command palette.
+YAL supports lightweight **Lua** plugins. Plugins can add commands (e.g. Spotify controls, Bluetooth management, window actions, notes/Shortcuts automations via `osascript`) that appear in YAL's command palette.
 
 ### Where plugins live
 
-- **Config file:** `~/.config/yal/plugins.lua`  
-- **Install directory:** `~/.local/share/yal/plugins/<plugin-name>/` (git-cloned here)
+- **Config file:** `~/.config/yal/plugins.lua`
+- **Install directory:** `~/.local/share/yal/plugins/<plugin-name>/` (git-cloned plugins go here)
 
-YAL's built in plugin manager will hot-load plugins from the config file when changes are made (no need to restart YAL).
+YAL's built-in plugin manager will hot-load plugins from the config file when changes are made (no need to restart YAL).
 
-### Quick start
+### Plugin config (`plugins.lua`)
 
-Create `~/.config/yal/plugins.lua`:
-
-Yal uses the format `<plugin-name> = "<github-user>/<repo>"` to clone from GitHub.
+Create `~/.config/yal/plugins.lua` and return an array of plugin entries. Each entry needs a `name` and either a `git` or `path` source:
 
 ```lua
-return { 
+return {
+    -- Git shorthand: clones from https://github.com/<user>/<repo>.git
     {
         name = "spotify",
         git = "klaatu01/yal-spotify-plugin"
-    }
+    },
+
+    -- Full git URL
+    {
+        name = "my-remote-plugin",
+        git = "https://github.com/user/repo.git"
+    },
+
+    -- Local path (supports ~ for home directory)
+    {
+        name = "bluetooth",
+        path = "~/.local/share/yal/plugins/bluetooth"
+    },
+
+    -- Absolute local path
+    {
+        name = "my-dev-plugin",
+        path = "/Users/me/dev/my-plugin"
+    },
+
+    -- Plugins can receive arbitrary config
+    {
+        name = "some-plugin",
+        git = "user/some-plugin",
+        config = {
+            api_key = "...",
+            option  = true,
+        }
+    },
 }
 ```
 
-### Writing a plugin (Lua)
+| Field    | Type           | Description                                                                                       |
+|----------|----------------|---------------------------------------------------------------------------------------------------|
+| `name`   | string         | Plugin identifier. For git plugins this is also the install directory name.                        |
+| `git`    | string or nil  | GitHub shorthand (`user/repo`), full HTTPS URL, or `git@` SSH URL. Cloned to the install directory. |
+| `path`   | string or nil  | Local filesystem path to the plugin directory. `~` is expanded to your home directory.             |
+| `config` | table or nil   | Free-form config table passed to the plugin's `init(config)` function.                            |
 
-Each plugin is a folder with an `init.lua` that returns a table exposing two functions:
+You must provide either `git` or `path` (not both). Path-based plugins are not cloned — YAL loads directly from that directory. This is useful for local development.
 
-- `init()` → returns a JSON-serializable table describing the plugin and its commands
-- `execute(req)` → runs a named command
+### Writing a plugin
 
-**Minimal skeleton:**
+Each plugin is a directory containing an `init.lua` that returns a module table with two functions:
+
+- `init(config)` — called once at load time; returns plugin metadata and commands
+- `execute(req)` — called when the user runs a command
+
+#### Directory structure
+
+```
+my-plugin/
+  init.lua          -- required entry point
+  vendor/            -- optional: vendored Lua modules (require-able as "a.b.c")
+```
+
+#### Minimal example
 
 ```lua
--- ~/.local/share/yal/plugins/my-plugin/init.lua
+-- init.lua
 local M = {}
 
-function M.init()
+function M.init(config)
   return {
     name = "my-plugin",
     description = "My first YAL plugin",
     version = "0.1.0",
     author = "Me",
     commands = {
-      { name = "hello", description = "Say hello in the console" },
+      { name = "hello", description = "Say hello" },
     },
   }
 end
 
--- req: { command: string, context: PluginExecuteContext }
 function M.execute(req)
   if req.command == "hello" then
     print("Hello from my-plugin!")
-    return { hide = true }   -- tell YAL to hide after success
+    return { hide = true }
   end
-  return { hide = false }    -- unknown command → keep UI open
+  return { hide = false }
 end
 
 return M
 ```
 
-**Command visibility:** return `{ hide = true }` when your command succeeds and YAL should dismiss; `{ hide = false }` to keep the UI up (e.g., when nothing happened or you want to show an error result in the UI).
+#### `init(config)` return value
 
-A proper guide is on its way.
+| Field         | Type   | Description                                    |
+|---------------|--------|------------------------------------------------|
+| `name`        | string | Plugin name.                                   |
+| `description` | string | Short description shown in the command palette. |
+| `version`     | string | Semver version string.                         |
+| `author`      | string | Author name.                                   |
+| `commands`    | array  | List of `{ name, description }` tables.        |
 
-### Plugin API
+The `config` argument is whatever was specified in `plugins.lua` (or `nil` if omitted).
 
-Plugins communicate with YAL via the built-in Lua yal std library. See the [YAL Lua Library Reference](./docs/yal-std.md) for details.
+#### `execute(req)` request shape
+
+```lua
+{
+  command = "hello",        -- which command the user selected
+  args    = ...,            -- optional args (usually nil)
+  context = {               -- runtime context
+    windows = { ... },      -- list of open windows
+    displays = { ... },     -- list of displays
+    current_display = { ... },
+  },
+}
+```
+
+Return `{ hide = true }` to dismiss YAL after success, or `{ hide = false }` to keep it open.
+
+### Showing UI: prompts and forms
+
+Plugins can show interactive prompts using the `yal.ui` module. A prompt displays a modal with content nodes and optional form fields.
+
+```lua
+local ui = require("yal.ui")
+
+local p = ui.prompt({
+  title   = "My Prompt",   -- optional window title
+  width   = 60,            -- optional width (percentage, default 75)
+  height  = 50,            -- optional height (percentage, default auto)
+  content = { ... },       -- array of content nodes (see below)
+  hotkeys = { ... },       -- optional hotkey definitions (see below)
+})
+```
+
+The `prompt()` call returns a prompt handle with three methods:
+
+| Method          | Returns                          | Description                                           |
+|-----------------|----------------------------------|-------------------------------------------------------|
+| `p:submission()` | table of form values             | Blocks until the user presses Enter. Errors on cancel. |
+| `p:state()`      | table of current values, or nil  | Polls live form state. Returns `nil` after submit. Errors on cancel. Rate-limited to 100ms. |
+| `p:cancel()`     | nothing                          | Programmatically closes the prompt.                   |
+
+#### Content nodes
+
+The `content` array supports these node types:
+
+```lua
+-- Plain text (with optional variant)
+{ type = "text", text = "Hello", variant = "heading" }
+-- variant: "muted", "caption", "code", "emphasis", "heading" (or omit for default)
+
+-- Markdown
+{ type = "markdown", md = "**bold** and _italic_" }
+
+-- Raw HTML
+{ type = "html", html = "<div>custom</div>" }
+
+-- Image
+{ type = "image", src = "https://...", alt = "desc", w = 100, h = 100 }
+
+-- Layout containers (nestable)
+{ type = "v_stack", gap = 8, children = { ... } }
+{ type = "h_stack", gap = 8, children = { ... } }
+{ type = "grid", cols = 2, gap = 8, children = { ... } }
+
+-- Form with input fields
+{ type = "form", name = "my-form", fields = { ... } }
+```
+
+#### Form fields
+
+Forms support three field kinds:
+
+```lua
+-- Text input
+{ kind = "text", name = "username", label = "Username", placeholder = "Enter name", max_length = 50 }
+
+-- Select dropdown
+{ kind = "select", name = "choice", label = "Pick one", options = {
+    { label = "Option A", value = "a" },
+    { label = "Option B", value = "b" },
+}}
+
+-- Slider
+{ kind = "slider", name = "volume", label = "Volume", min = 0, max = 100, step = 1, value = 50, show_value = true }
+```
+
+Form values are returned as a table keyed by field `name` when the user submits (Enter) or when polled via `p:state()`.
+
+#### Hotkeys
+
+Prompts can register hotkeys that the user can press while the prompt is open. Hotkey presses are delivered through the `_hotkey` key in `p:state()` responses.
+
+```lua
+local p = ui.prompt({
+  title = "Device Manager",
+  hotkeys = {
+    { key = "r", label = "refresh" },
+    { key = "c", label = "connect" },
+    { key = "x", label = "disconnect" },
+  },
+  content = { ... },
+})
+
+-- Poll for hotkey presses
+while true do
+  local state = p:state()
+  if state == nil then break end  -- user submitted
+
+  local hotkey = state["_hotkey"]
+  if hotkey == "r" then
+    -- handle refresh
+  elseif hotkey == "c" then
+    -- handle connect
+  end
+end
+```
+
+Registered hotkeys are displayed as hints at the bottom of the prompt. Each hotkey press is delivered exactly once — the `_hotkey` field is only present in the `state()` call immediately following the key press.
+
+### Plugin standard library
+
+Plugins have access to a set of built-in Lua modules beyond `yal.ui`. All modules are required as `yal.*`:
+
+| Module     | Require path  | Key functions                                                |
+|------------|---------------|--------------------------------------------------------------|
+| UI         | `yal.ui`      | `prompt(form)` — show interactive prompts                    |
+| JSON       | `yal.json`    | `encode(value)`, `decode(string)`                            |
+| HTTP       | `yal.http`    | `request(opts)`, `get(url)`, `post_json(url, body)`          |
+| Logging    | `yal.log`     | `debug(msg)`, `info(msg)`, `warn(msg)`, `error(msg)`         |
+| Database   | `yal.db`      | `open(namespace)` — persistent key-value store               |
+| Base64     | `yal.base64`  | `encode(input)`, `decode(b64)`                               |
+| Socket     | `yal.socket`  | `bind(ip, port)` — TCP server/client                         |
+
+Plugins also have access to Lua's full standard library (`io`, `os`, `string`, `table`, etc.).
+
+See the [YAL Lua Library Reference](./docs/yal-std.md) for the full API.
 
 ### Example plugins
 

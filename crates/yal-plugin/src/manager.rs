@@ -62,25 +62,39 @@ impl<T: backend::Backend> PluginManager<T> {
     pub async fn install(&mut self) -> Result<()> {
         self.load_config().await?;
         for plugin in &self.config {
+            // Path-based plugins don't need installation
+            if plugin.path.is_some() {
+                log::info!("Plugin '{}' uses a local path, skipping install", plugin.name);
+                continue;
+            }
+
+            let git = match &plugin.git {
+                Some(g) => g,
+                None => {
+                    log::warn!("Plugin '{}' has neither git nor path, skipping", plugin.name);
+                    continue;
+                }
+            };
+
             log::info!("Installing plugin: {}", plugin.name);
-            log::info!("  from: {}", plugin.git);
+            log::info!("  from: {}", git);
             let plugin_dir = plugins_dir().join(&plugin.name);
             if plugin_dir.exists() {
                 log::info!("  already installed, skipping");
                 continue;
             }
 
-            let giturl = if plugin.git.starts_with("http://")
-                || plugin.git.starts_with("https://")
-                || plugin.git.starts_with("git@")
+            let giturl = if git.starts_with("http://")
+                || git.starts_with("https://")
+                || git.starts_with("git@")
             {
-                plugin.git.clone()
+                git.clone()
             } else {
-                format!("https://github.com/{}.git", plugin.git)
+                format!("https://github.com/{}.git", git)
             };
 
             let repo = Repository::clone(&giturl, &plugin_dir)
-                .with_context(|| format!("Failed cloning {}", plugin.git))?;
+                .with_context(|| format!("Failed cloning {}", git))?;
             log::info!("  cloned to: {}", repo.path().parent().unwrap().display());
         }
         Ok(())
@@ -89,11 +103,27 @@ impl<T: backend::Backend> PluginManager<T> {
     pub async fn load_plugins(&mut self) -> Result<()> {
         self.plugins.clear();
         for plugin in &self.config {
-            let plugin_dir = plugins_dir().join(&plugin.name);
-            if !plugin_dir.exists() {
-                log::warn!("Plugin '{}' is not installed, skipping", plugin.name);
-                continue;
-            }
+            let plugin_dir = if let Some(ref path) = plugin.path {
+                let expanded = if path.starts_with("~/") {
+                    let home = dirs::home_dir().expect("Failed to get home directory");
+                    home.join(&path[2..])
+                } else {
+                    PathBuf::from(path)
+                };
+                let p = expanded;
+                if !p.exists() {
+                    log::warn!("Plugin '{}' path does not exist: {}, skipping", plugin.name, p.display());
+                    continue;
+                }
+                p
+            } else {
+                let d = plugins_dir().join(&plugin.name);
+                if !d.exists() {
+                    log::warn!("Plugin '{}' is not installed, skipping", plugin.name);
+                    continue;
+                }
+                d
+            };
             let plugin_ref = crate::plugin::PluginRef {
                 name: plugin.name.clone(),
                 path: plugin_dir.clone(),

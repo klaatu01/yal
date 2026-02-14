@@ -1,12 +1,19 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Hotkey {
+    pub key: String,
+    pub label: String,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Prompt {
     pub title: Option<String>,
     pub width: Option<f32>,
     pub height: Option<f32>,
     pub content: Vec<Node>,
     pub ui_schema_version: Option<u32>,
+    pub hotkeys: Option<Vec<Hotkey>>,
 }
 
 impl Prompt {
