@@ -11,6 +11,7 @@ mod config_watcher;
 mod display;
 mod focus;
 mod frontend_middleware;
+mod ipc;
 mod ns_watcher;
 mod plugin;
 mod plugin_backend;
@@ -269,6 +270,8 @@ pub fn run() {
                 app.manage(theme_manager_actor);
                 app.manage(config_actor);
                 app.manage(frontend_middleware);
+
+                ipc::YalIPCServer::new(app.handle().clone()).spawn().await;
 
                 event_tx.send(common::Events::RefreshTree).unwrap();
             });

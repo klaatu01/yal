@@ -128,7 +128,7 @@ pub struct WindowNode {
     pub is_focused: bool,
 }
 
-#[derive(Clone)]
+#[derive(Clone, serde::Serialize, serde::Deserialize, Debug)]
 #[allow(dead_code)]
 pub struct SearchResult {
     pub display_id: DisplayId,

@@ -32,14 +32,11 @@ objc2 = "0.6.2"
 objc2-foundation = "0.3.1"
 objc2-app-kit = "0.3.1"
 notify = "8.2.0"
-yal-core = { path = "../crates/yal-core" }
 core-foundation = { version = "0.10.1", features = ["mac_os_10_8_features"] }
 core-graphics = { version = "0.25.0", features = ["highsierra"] }
 tauri-plugin-log = "2"
 log = "0.4.28"
 once_cell = "1.21.3"
-lightsky = { path = "../crates/lightsky" }
-yal-theme = { path = "../crates/yal-theme" }
 tauri-plugin-macos-permissions = "2.3.0"
 async-channel = "2.5.0"
 kameo = "0.18.0"
@@ -49,10 +46,16 @@ notify-debouncer-mini = "0.7.0"
 block2 = "0.6.2"
 tokio = { version = "1.47.1", features = ["time"] }
 objc2-core-foundation = "0.3.2"
-yal-plugin = { path = "../crates/yal-plugin" }
 kanal = "0.1.1"
-yal-config = { path = "../crates/yal-config" }
 nanoid = "0.4.0"
+lightsky = { path = "../crates/lightsky" }
+yal-core = { path = "../crates/yal-core" }
+yal-plugin = { path = "../crates/yal-plugin" }
+yal-config = { path = "../crates/yal-config" }
+yal-ipc = { path = "../crates/yal-ipc" }
+yal-theme = { path = "../crates/yal-theme" }
+tarpc = "0.37.0"
+tokio-serde = "0.9.0"
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-autostart = "2"
