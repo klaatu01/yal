@@ -21,6 +21,7 @@ pub fn PromptView(
     set_prompt: WriteSignal<Option<PromptRequest>>,
     set_form_values: WriteSignal<std::collections::HashMap<String, serde_json::Value>>,
     form_values: ReadSignal<std::collections::HashMap<String, serde_json::Value>>,
+    set_hotkey: WriteSignal<Option<String>>,
 ) -> impl IntoView {
     let popup_keydown = move |e: web_sys::KeyboardEvent| {
         let key = e.key();
@@ -65,7 +66,16 @@ pub fn PromptView(
                     nudge_active_slider(1.0);
                 }
             }
-            _ => {}
+            _ => {
+                if let Some(p) = prompt.get() {
+                    if let Some(ref hotkeys) = p.prompt.hotkeys {
+                        if hotkeys.iter().any(|hk| hk.key == key) {
+                            e.prevent_default();
+                            set_hotkey.set(Some(key));
+                        }
+                    }
+                }
+            }
         }
     };
 
@@ -117,6 +127,32 @@ pub fn PromptView(
               }
             }
           </div>
+          {
+            move || {
+              if let Some(ref hotkeys) = p().prompt.hotkeys {
+                if !hotkeys.is_empty() {
+                  return view! {
+                    <div class="yal-popup-hotkeys">
+                      {
+                        hotkeys.iter().map(|hk| {
+                          let key = hk.key.clone();
+                          let label = hk.label.clone();
+                          view! {
+                            <span class="yal-hotkey-hint">
+                              <kbd>{ key }</kbd>
+                              " "
+                              { label }
+                            </span>
+                          }
+                        }).collect_view()
+                      }
+                    </div>
+                  }.into_any();
+                }
+              }
+              ().into_any()
+            }
+          }
         </div>
       </div>
     }

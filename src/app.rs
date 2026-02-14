@@ -31,6 +31,7 @@ pub fn App() -> impl IntoView {
     };
 
     let (prompt, set_prompt) = signal::<Option<PromptRequest>>(None);
+    let (hotkey, set_hotkey) = signal(Option::<String>::None);
 
     // Prime state from backend
     prime_config(set_shortcuts);
@@ -40,7 +41,7 @@ pub fn App() -> impl IntoView {
     init_config_listener(set_shortcuts);
     init_theme_listener();
     init_cmd_list_listener(set_cmd_list, reset);
-    init_api_listener(set_prompt, prompt, form_values, set_form_values);
+    init_api_listener(set_prompt, prompt, form_values, set_form_values, hotkey, set_hotkey);
 
     let filtered = Memo::new(move |_| {
         let q = query.get();
@@ -206,7 +207,7 @@ pub fn App() -> impl IntoView {
       <list::ResultsList selected=selected filtered=filtered filter=filter />
 
       <Show when=move || prompt.get().is_some()>
-        <PromptView prompt=prompt set_prompt=set_prompt form_values=form_values set_form_values=set_form_values />
+        <PromptView prompt=prompt set_prompt=set_prompt form_values=form_values set_form_values=set_form_values set_hotkey=set_hotkey />
       </Show>
     }
 }
